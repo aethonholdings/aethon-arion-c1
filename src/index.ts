@@ -21,7 +21,6 @@ export { C1ConfiguratorParamSegment } from "./interfaces/c1.model.interfaces";
 // classes
 export { C1SimulationFactory } from "./classes/pipeline/class.c1.simulation.factory";
 export { C1Presentation } from "./classes/pipeline/class.c1.presentation";
-export { C1ResultSet } from "./classes/pipeline/class.c1.result.set";
 
 // enums and constants
 export { C1PlantStateVariables } from "./constants/c1.model.constants";

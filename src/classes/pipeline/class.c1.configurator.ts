@@ -114,7 +114,7 @@ export class C1Configurator extends Configurator {
                     for (let gamma = 0; gamma < this.stateCount; gamma++) {
                         if (
                             params.data.matrixInit.incentive === "purposeful" ||
-                            params.data.matrixInit.influence === "hybrid"
+                            params.data.matrixInit.incentive === "hybrid"
                         ) {
                             if (tau === C1AgentStateIndex.ACTION && gamma === C1ReportingVariablesIndex.REVENUE)
                                 agentSetTensors.incentiveTensor[alpha][sigma][tau][gamma] =
