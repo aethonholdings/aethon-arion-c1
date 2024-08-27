@@ -33,6 +33,7 @@ export const C1PlantStateVariablesArray: string[] = [
 ];
 
 export const C1PlantStateTarget: number[] = [1];
+export const C1PlantStateIdle: number[] = [0];
 
 // REPORTING ---------------------------------
 export enum C1ReportingVariablesIndex {

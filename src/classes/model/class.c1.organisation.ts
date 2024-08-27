@@ -18,7 +18,7 @@ export class C1Organisation extends Organisation {
         const agentSet = new C1AgentSet(config, randomStreamFactory.newStream(), logger);
         const plant = new C1Plant(config, randomStreamFactory.newStream(), logger);
         const reporting = new C1Reporting(config, logger);
-        const board = new C1Board(clockTicks, reporting.getReportingTensor(), logger);
+        const board = new C1Board(config, clockTicks, reporting.getReportingTensor(), logger);
         super(board, agentSet, plant, reporting, logger);
         this.config = config;
         this._log("C1 Organisation model initialised");

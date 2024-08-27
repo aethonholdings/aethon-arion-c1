@@ -16,7 +16,6 @@ export { C1Simulation } from "./classes/model/class.c1.simulation";
 
 // interfaces
 export { C1ConfiguratorParamsDTO } from "./interfaces/c1.model.interfaces";
-export { C1ConfiguratorParamSegment } from "./interfaces/c1.model.interfaces";
 
 // classes
 export { C1SimulationFactory } from "./classes/pipeline/class.c1.simulation.factory";

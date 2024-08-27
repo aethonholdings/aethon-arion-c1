@@ -152,7 +152,9 @@ export class C1Configurator extends Configurator {
         let configDTO = {} as OrgConfigDTO;
         configDTO.type = C1ModelName;
         configDTO.clockTickSeconds = C1ModelClockTickSeconds;
-        configDTO.board = {};
+        configDTO.board = {
+            controlStep: params.data.board.controlStep
+        };
         configDTO.plant = {
             initialState: [0],
             graph: graph
