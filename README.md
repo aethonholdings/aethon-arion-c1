@@ -1,4 +1,4 @@
-# aethon-arion-node
+# aethon-arion-c1
 
 ## Description
 
