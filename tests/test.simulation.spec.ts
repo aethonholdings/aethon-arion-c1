@@ -1,5 +1,5 @@
 import { lastValueFrom, map } from "rxjs";
-import { Logger, RandomStreamFactory, LogLine, SimulationConfig, StepOutput } from "@arion/pipeline";
+import { Logger, RandomStreamFactory, LogLine, SimulationConfig } from "aethon-arion-pipeline";
 import { brokenC1SimulationConfig, simpleC1SimulationConfigResult } from "./init/test.init.simconfig";
 import { C1Simulation } from "../src/classes/model/class.c1.simulation";
 
@@ -33,12 +33,11 @@ export function runSimulationTest(description: string, simConfig: SimulationConf
             expect(() => new C1Simulation(brokenC1SimulationConfig, logger, new RandomStreamFactory())).toThrowError();
         })
 
-        it("runs the simulation", async () => {
+        it("runs the simulation without control step", async () => {
             const last = await lastValueFrom(simulation.run$());
             expect(last.organisation.getAgents().getTensors().priorityTensor).toEqual(
                 simpleC1SimulationConfigResult
             );
         });
-
     });
 }

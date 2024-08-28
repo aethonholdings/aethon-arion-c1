@@ -1,6 +1,6 @@
 // SIMCONFIGS -------------------------------------
 
-import { SimulationConfig } from "@arion/pipeline";
+import { SimulationConfig } from "aethon-arion-pipeline";
 
 // Simple C1 simulation config
 
@@ -10,7 +10,9 @@ export const simpleC1SimulationConfig: SimulationConfig = {
     orgConfig: {
         type: "C1",
         clockTickSeconds: 1,
-        board: {},
+        board: {
+            controlStep: false
+        },
         agentSet: {
             priorityTensor: [
                 [
