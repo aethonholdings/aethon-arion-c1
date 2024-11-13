@@ -10,7 +10,7 @@ import {
     C1ReportingVariables,
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
-} from "../../constants/c1.model.constants";
+} from "../constants/c1.model.constants";
 
 export class C1Presentation extends Presentation {
     reportingVariableEnum = C1ReportingVariables;

@@ -1,10 +1,10 @@
 import { AgentSetTensors, Targets } from "aethon-arion-pipeline";
-import { C1OrgModelConfig } from "../../interfaces/c1.model.interfaces";
+import { C1OrgModelConfig } from "../interfaces/c1.model.interfaces";
 import { AgentSet } from "aethon-arion-pipeline";
 import { Logger } from "aethon-arion-pipeline";
 import { RandomStream } from "aethon-arion-pipeline";
 import { State } from "aethon-arion-pipeline";
-import { StateAction, StateSelf } from "./class.c1.state";
+import { StateAction, StateSelf } from "./c1-state.class";
 
 export class C1AgentSet extends AgentSet {
     constructor(config: C1OrgModelConfig, randomStream: RandomStream, logger: Logger) {

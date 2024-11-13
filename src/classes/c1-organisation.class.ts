@@ -1,9 +1,9 @@
 import { Organisation, RandomStreamFactory, Logger } from "aethon-arion-pipeline";
-import { C1OrgModelConfig } from '../../interfaces/c1.model.interfaces';
-import { C1Plant } from "./class.c1.plant";
-import { C1Reporting } from "./class.c1.reporting";
-import { C1Board } from "./class.c1.board";
-import { C1AgentSet } from "./class.c1.agent.set";
+import { C1OrgModelConfig } from '../interfaces/c1.model.interfaces';
+import { C1Plant } from "./c1-plant.class";
+import { C1Reporting } from "./c1-reporting.class";
+import { C1Board } from "./c1-board.class";
+import { C1AgentSet } from "./c1-agent-set.class";
 
 export class C1Organisation extends Organisation {
     private config: C1OrgModelConfig;

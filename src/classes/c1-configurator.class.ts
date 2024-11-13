@@ -1,4 +1,4 @@
-import { AgentSetTensorsDTO, Utils, Configurator, ConfiguratorSignatureDTO, OrgConfigDTO } from "aethon-arion-pipeline";
+import { AgentSetTensorsDTO, Utils, Configurator, OrgConfigDTO } from "aethon-arion-pipeline";
 import {
     C1AgentStateIndex,
     C1AgentStatesArray,
@@ -7,22 +7,20 @@ import {
     C1PlantStateVariablesArray,
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
-} from "../../constants/c1.model.constants";
-import { C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.model.interfaces";
+} from "../constants/c1.model.constants";
+import { C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../interfaces/c1.model.interfaces";
+import { C1Model } from "./c1-model.class";
 
-export const C1ConfiguratorSignature: ConfiguratorSignatureDTO = {
-    name: "C1Configurator",
-    modelType: C1ModelName,
-    description: "Builds a configuration for a C1 Organisation using behaviour archetypes."
-};
+export const c1ConfiguratorName: string = "C1Configurator";
 
-export class C1Configurator extends Configurator {
+export class C1Configurator extends Configurator<C1Model> {
     stateCount: number = C1AgentStatesArray.length;
     plantDegreesOfFreedom: number = C1PlantStateVariablesArray.length;
     reportingDegreesOfFreedom: number = C1ReportingVariablesArray.length;
 
-    constructor() {
-        super(C1ConfiguratorSignature);
+    constructor(model: C1Model) {
+        super(model, c1ConfiguratorName);
+        this.model = model;
     }
 
     generate(params: C1ConfiguratorParamsDTO): OrgConfigDTO {
