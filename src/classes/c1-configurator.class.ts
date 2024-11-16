@@ -8,7 +8,7 @@ import {
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
 } from "../constants/c1.model.constants";
-import { C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../interfaces/c1.model.interfaces";
+import { C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../interfaces/c1.interfaces";
 import { C1Model } from "./c1-model.class";
 
 export const c1ConfiguratorName: string = "C1Configurator";
@@ -30,7 +30,7 @@ export class C1Configurator extends Configurator<C1Model> {
             : (agentCount = params.data.layers);
 
         // initialise the org config tensors with zeroes
-        let agentSetTensors: AgentSetTensorsDTO = {
+        const agentSetTensors: AgentSetTensorsDTO = {
             priorityTensor: Utils.tensor([agentCount, this.stateCount, this.stateCount], () => {
                 return 0;
             }) as number[][][],
@@ -55,7 +55,7 @@ export class C1Configurator extends Configurator<C1Model> {
         let parentAlpha: number = 0;
         let layer: number = 1;
         let layerAlphaEnd: number = params.data.spans;
-        let graph: number[][] = Utils.tensor([agentCount, agentCount], () => {
+        const graph: number[][] = Utils.tensor([agentCount, agentCount], () => {
             return 0;
         }) as number[][];
         for (let alpha = 1; alpha < agentCount; alpha++) {
@@ -147,7 +147,7 @@ export class C1Configurator extends Configurator<C1Model> {
         }
 
         // package the configuration into the DTO
-        let configDTO = {} as OrgConfigDTO;
+        const configDTO = {} as OrgConfigDTO;
         configDTO.type = C1ModelName;
         configDTO.clockTickSeconds = C1ModelClockTickSeconds;
         configDTO.board = {

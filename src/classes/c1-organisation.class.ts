@@ -1,26 +1,26 @@
-import { Organisation, RandomStreamFactory, Logger } from "aethon-arion-pipeline";
-import { C1OrgModelConfig } from '../interfaces/c1.model.interfaces';
+import { Organisation, RandomStreamFactory, Logger, OrgModelConfig, SimulationConfig } from "aethon-arion-pipeline";
 import { C1Plant } from "./c1-plant.class";
 import { C1Reporting } from "./c1-reporting.class";
 import { C1Board } from "./c1-board.class";
 import { C1AgentSet } from "./c1-agent-set.class";
 
 export class C1Organisation extends Organisation {
-    private config: C1OrgModelConfig;
+    private _config: OrgModelConfig;
 
-    constructor(
-        clockTicks: number,
-        config: C1OrgModelConfig,
-        randomStreamFactory: RandomStreamFactory,
-        logger: Logger
-    ) {
-        logger.trace({sourceObject: "Organisation", message: "Initialising C1 Organisation model"});
-        const agentSet = new C1AgentSet(config, randomStreamFactory.newStream(), logger);
-        const plant = new C1Plant(config, randomStreamFactory.newStream(), logger);
-        const reporting = new C1Reporting(config, logger);
-        const board = new C1Board(config, clockTicks, reporting.getReportingTensor(), logger);
-        super(board, agentSet, plant, reporting, logger);
-        this.config = config;
-        this._log("C1 Organisation model initialised");
+    constructor(simConfig: SimulationConfig, randomStreamFactory: RandomStreamFactory, logger: Logger) {
+        logger.trace({ sourceObject: "Organisation", message: "Initialising C1 Organisation model" });
+        const orgConfig = simConfig.orgConfig;
+        if (orgConfig) {
+            const clockTicks = (simConfig.days * 8 * 60 * 60) / orgConfig.clockTickSeconds;
+            const agentSet = new C1AgentSet(orgConfig, randomStreamFactory.newStream(), logger);
+            const plant = new C1Plant(orgConfig, randomStreamFactory.newStream(), logger);
+            const reporting = new C1Reporting(orgConfig, logger);
+            const board = new C1Board(orgConfig, clockTicks, reporting.getReportingTensor(), logger);
+            super(board, agentSet, plant, reporting, logger);
+            this._config = orgConfig;
+            this._log("C1 Organisation model initialised");
+        } else {
+            throw new Error("No OrgConfig found for SimulationConfig");
+        }
     }
 }

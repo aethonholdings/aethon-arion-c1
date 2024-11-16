@@ -1,22 +1,24 @@
-import { Board, Targets, Logger } from "aethon-arion-pipeline";
+import { Board, Targets, Logger, OrgModelConfig } from "aethon-arion-pipeline";
 import { C1PlantStateIdle, C1PlantStateTarget, C1ReportingVariablesIndex } from "../constants/c1.model.constants";
-import { C1OrgModelConfig } from "../interfaces/c1.model.interfaces";
+import { C1BoardConfig } from "../interfaces/c1.interfaces";
 
 export class C1Board extends Board {
-    private controlStep: boolean;
-    private stepPlans: {
+    private _config: C1BoardConfig;
+    private _controlStep: boolean;
+    private _stepPlans: {
         before: Targets;
         after: Targets;
     };
-    private stepExecuted: boolean;
-    private totalClockTicks: number;
+    private _stepExecuted: boolean;
+    private _totalClockTicks: number;
 
-    constructor(config: C1OrgModelConfig, clockTicks: number, reporting: number[], logger: Logger) {
+    constructor(config: OrgModelConfig, clockTicks: number, reporting: number[], logger: Logger) {
         super({} as Targets, logger);
         this._log("Initialising C1 Board");
-        this.controlStep = config.board.controlStep;
-        this.stepExecuted = false;
-        this.totalClockTicks = clockTicks;
+        this._config = config.board as C1BoardConfig;
+        this._controlStep = this._config.controlStep;
+        this._stepExecuted = false;
+        this._totalClockTicks = clockTicks;
         const targetFinancialsAfter = JSON.parse(JSON.stringify(reporting));
         const targetPlantStateAfter: number[] = C1PlantStateTarget;
 
@@ -24,20 +26,20 @@ export class C1Board extends Board {
         targetFinancialsAfter[C1ReportingVariablesIndex.REVENUE] =
             targetFinancialsAfter[C1ReportingVariablesIndex.HEADCOUNT] *
             targetFinancialsAfter[C1ReportingVariablesIndex.UNIT_PRICE] *
-            this.totalClockTicks;
+            this._totalClockTicks;
 
         targetFinancialsAfter[C1ReportingVariablesIndex.PAYROLL] =
             targetFinancialsAfter[C1ReportingVariablesIndex.HEADCOUNT] *
             targetFinancialsAfter[C1ReportingVariablesIndex.UNIT_PAYROLL] *
-            this.totalClockTicks;
+            this._totalClockTicks;
 
         targetFinancialsAfter[C1ReportingVariablesIndex.NET_INCOME] =
             targetFinancialsAfter[C1ReportingVariablesIndex.REVENUE] -
             targetFinancialsAfter[C1ReportingVariablesIndex.PAYROLL];
 
-        targetFinancialsAfter[C1ReportingVariablesIndex.CLOCK_TICKS] = this.totalClockTicks;
+        targetFinancialsAfter[C1ReportingVariablesIndex.CLOCK_TICKS] = this._totalClockTicks;
 
-        this.stepPlans = {
+        this._stepPlans = {
             before: {
                 plantState: targetPlantStateAfter,
                 reporting: targetFinancialsAfter
@@ -48,7 +50,7 @@ export class C1Board extends Board {
             }
         };
         // calculate the target revenue, payroll and net income before the step, if applicable
-        if (this.controlStep) {
+        if (this._controlStep) {
             const targetFinancialsBefore = JSON.parse(JSON.stringify(reporting));
             const targetPlantStateBefore: number[] = C1PlantStateIdle;
             targetFinancialsBefore[C1ReportingVariablesIndex.REVENUE] = 0;
@@ -57,15 +59,15 @@ export class C1Board extends Board {
             targetFinancialsBefore[C1ReportingVariablesIndex.NET_INCOME] =
                 targetFinancialsBefore[C1ReportingVariablesIndex.REVENUE] -
                 targetFinancialsBefore[C1ReportingVariablesIndex.PAYROLL];
-            targetFinancialsBefore[C1ReportingVariablesIndex.CLOCK_TICKS] = this.totalClockTicks;
-            this.stepPlans.before = {
+            targetFinancialsBefore[C1ReportingVariablesIndex.CLOCK_TICKS] = this._totalClockTicks;
+            this._stepPlans.before = {
                 plantState: targetPlantStateBefore,
                 reporting: targetFinancialsBefore
             };
         }
 
         // initialise the plan tensor with the target plant state and reporting results at the initial state (before any step)
-        this.plan = this.stepPlans.before;
+        this.plan = this._stepPlans.before;
         this._log("C1 Board initialised", { targets: this.plan });
         return this;
     }
@@ -74,10 +76,11 @@ export class C1Board extends Board {
         // check if we are halfway through the simulation and if we need to switch the control step
         this._log("Transitioning C1 Board state");
         if (
-            !this.stepExecuted && reportingTensor[C1ReportingVariablesIndex.CLOCK_TICKS] >= this.totalClockTicks / 2
+            !this._stepExecuted &&
+            reportingTensor[C1ReportingVariablesIndex.CLOCK_TICKS] >= this._totalClockTicks / 2
         ) {
-            this.plan = this.stepPlans.after;   // switch the plan to the after step
-            this.stepExecuted = true;           // mark the signal step as executed
+            this.plan = this._stepPlans.after; // switch the plan to the after step
+            this._stepExecuted = true; // mark the signal step as executed
         }
         // broadcast the Board plan
         this._log("C1 Board state transitioned", { plan: this.plan });

@@ -1,21 +1,25 @@
-import { Logger, Reporting } from "aethon-arion-pipeline";
+import { Logger, OrgModelConfig, Reporting } from "aethon-arion-pipeline";
 import {
     C1PlantStateVariablesIndex,
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
 } from "../constants/c1.model.constants";
-import { C1OrgModelConfig } from "../interfaces/c1.model.interfaces";
+import { C1ReportingConfig } from "../interfaces/c1.interfaces";
 
 export class C1Reporting extends Reporting {
-    constructor(config: C1OrgModelConfig, logger: Logger) {
+    private _config: C1ReportingConfig;
+
+    constructor(config: OrgModelConfig, logger: Logger) {
         // initialise the reporting vector
         logger.trace({ sourceObject: "Reporting", message: "Initialising C1 Reporting" });
+        const tmpConfig: C1ReportingConfig = config.reporting as C1ReportingConfig;
         const initialReportingVector: number[] = new Array<number>(C1ReportingVariablesArray.length).fill(0);
         initialReportingVector[C1ReportingVariablesIndex.CLOCK_TICK_SECONDS] = config.clockTickSeconds;
         initialReportingVector[C1ReportingVariablesIndex.HEADCOUNT] = config.agentSet.judgmentTensor.length;
-        initialReportingVector[C1ReportingVariablesIndex.UNIT_PAYROLL] = config.reporting.unitPayroll;
-        initialReportingVector[C1ReportingVariablesIndex.UNIT_PRICE] = config.reporting.unitPrice;
+        initialReportingVector[C1ReportingVariablesIndex.UNIT_PAYROLL] = tmpConfig.unitPayroll;
+        initialReportingVector[C1ReportingVariablesIndex.UNIT_PRICE] = tmpConfig.unitPrice;
         super(initialReportingVector, logger);
+        this._config = tmpConfig;
         this._log("C1 Reporting initialised", { reportingTensor: this.reportingTensor });
         return this;
     }

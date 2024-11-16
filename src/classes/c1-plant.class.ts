@@ -1,11 +1,14 @@
-import { Plant, RandomStream, Logger } from "aethon-arion-pipeline";
-import { C1OrgModelConfig } from "../interfaces/c1.model.interfaces";
+import { Plant, RandomStream, Logger, OrgModelConfig } from "aethon-arion-pipeline";
 import { C1PlantStateVariablesIndex } from "../constants/c1.model.constants";
+import { C1PlantConfig } from "../interfaces/c1.interfaces";
 
 export class C1Plant extends Plant {
-    constructor(config: C1OrgModelConfig, random: RandomStream, logger: Logger) {
+    private _config: C1PlantConfig;
+
+    constructor(config: OrgModelConfig, random: RandomStream, logger: Logger) {
         logger.trace({ sourceObject: "Plant", message: "Initialising C1 Plant" });
-        super(config.plant.initialState, logger);
+        super((config.plant as C1PlantConfig).initialState, logger);
+        this._config = config.plant as C1PlantConfig;
         this._log("C1 Plant initialised", { stateTensor: this.stateTensor });
     }
 

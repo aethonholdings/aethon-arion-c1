@@ -1,21 +1,7 @@
-import {
-    OrgModelConfig,
-    AgentSetTensors,
-    PlantConfig,
-    ReportingConfig,
-    ConfiguratorParamsDTO,
-    ConfiguratorParamData
-} from "aethon-arion-pipeline";
+import { PlantConfig, ReportingConfig, ConfiguratorParamsDTO, ConfiguratorParamData, BoardConfig } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType } from "../types/c1.types";
 
 // CONFIG ---------------------------------
-export interface C1OrgModelConfig extends OrgModelConfig {
-    agentSet: AgentSetTensors;
-    plant: C1PlantConfig;
-    reporting: C1ReportingConfig;
-    board: C1BoardConfig;
-}
-
 export interface C1PlantConfig extends PlantConfig {
     initialState: number[];
     graph: number[][];
@@ -26,7 +12,7 @@ export interface C1ReportingConfig extends ReportingConfig {
     unitPrice: number;
 }
 
-export interface C1BoardConfig {
+export interface C1BoardConfig extends BoardConfig {
     controlStep: boolean;
 }
 
