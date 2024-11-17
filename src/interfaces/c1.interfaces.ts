@@ -1,19 +1,15 @@
-import { PlantConfig, ReportingConfig, ConfiguratorParamsDTO, ConfiguratorParamData, BoardConfig } from "aethon-arion-pipeline";
+import {
+    PlantConfig,
+    ReportingConfig,
+    ConfiguratorParamsDTO,
+    ConfiguratorParamData,
+    BoardConfig
+} from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType } from "../types/c1.types";
 
 // CONFIG ---------------------------------
-export interface C1PlantConfig extends PlantConfig {
-    initialState: number[];
-    graph: number[][];
-}
-
-export interface C1ReportingConfig extends ReportingConfig {
-    unitPayroll: number;
-    unitPrice: number;
-}
-
-export interface C1BoardConfig extends BoardConfig {
-    controlStep: boolean;
+export interface C1ConfiguratorParamsDTO extends ConfiguratorParamsDTO {
+    data: C1ConfiguratorParamData;
 }
 
 export interface C1ConfiguratorParamData extends ConfiguratorParamData {
@@ -31,13 +27,22 @@ export interface C1ConfiguratorParamData extends ConfiguratorParamData {
         judgment: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
         incentive: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
     };
+    plant: C1PlantConfig; // initial state of the plant and the graph
     reporting: C1ReportingConfig; // base values of unit price and costs
-    board: {
-        controlStep: boolean; // defines whether the Board will change the targets halfway through the simulation to zero to test controllability
-    };
+    board: C1BoardConfig; // defines whether the Board will change the targets halfway through the simulation to zero to test controllability
 }
 
-// PIPELINE ---------------------------------
-export interface C1ConfiguratorParamsDTO extends ConfiguratorParamsDTO {
-    data: C1ConfiguratorParamData;
+export interface C1PlantConfig extends PlantConfig {
+    initialState: number[];
+    graph: number[][];
 }
+
+export interface C1ReportingConfig extends ReportingConfig {
+    unitPayroll: number;
+    unitPrice: number;
+}
+
+export interface C1BoardConfig extends BoardConfig {
+    controlStep: boolean; 
+}
+

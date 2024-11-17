@@ -7,13 +7,13 @@ import {
     C1PlantStateVariablesArray,
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
-} from "../constants/c1.model.constants";
-import { C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../interfaces/c1.interfaces";
-import { C1Model } from "./c1-model.class";
+} from "../../constants/c1.model.constants";
+import { C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.interfaces";
+import { C1Model } from "../model/c1-model.class";
 
 export const c1ConfiguratorName: string = "C1Configurator";
 
-export class C1Configurator extends Configurator<C1Model> {
+export class C1BaseConfigurator extends Configurator {
     stateCount: number = C1AgentStatesArray.length;
     plantDegreesOfFreedom: number = C1PlantStateVariablesArray.length;
     reportingDegreesOfFreedom: number = C1ReportingVariablesArray.length;

@@ -1,6 +1,6 @@
 import { Board, Targets, Logger, OrgModelConfig } from "aethon-arion-pipeline";
-import { C1PlantStateIdle, C1PlantStateTarget, C1ReportingVariablesIndex } from "../constants/c1.model.constants";
-import { C1BoardConfig } from "../interfaces/c1.interfaces";
+import { C1PlantStateIdle, C1PlantStateTarget, C1ReportingVariablesIndex } from "../../constants/c1.model.constants";
+import { C1BoardConfig } from "../../interfaces/c1.interfaces";
 
 export class C1Board extends Board {
     private _config: C1BoardConfig;

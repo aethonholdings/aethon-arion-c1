@@ -1,4 +1,4 @@
-import { C1Model } from "../classes/c1-model.class";
+import { C1Model } from "../classes/model/c1-model.class";
 
 // BASE CONSTANTS --------------------------------
 export const C1ModelName: string = "C1";

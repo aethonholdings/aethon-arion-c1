@@ -3,8 +3,8 @@ import {
     C1PlantStateVariablesIndex,
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
-} from "../constants/c1.model.constants";
-import { C1ReportingConfig } from "../interfaces/c1.interfaces";
+} from "../../constants/c1.model.constants";
+import { C1ReportingConfig } from "../../interfaces/c1.interfaces";
 
 export class C1Reporting extends Reporting {
     private _config: C1ReportingConfig;

@@ -1,6 +1,6 @@
 import { Plant, RandomStream, Logger, OrgModelConfig } from "aethon-arion-pipeline";
-import { C1PlantStateVariablesIndex } from "../constants/c1.model.constants";
-import { C1PlantConfig } from "../interfaces/c1.interfaces";
+import { C1PlantStateVariablesIndex } from "../../constants/c1.model.constants";
+import { C1PlantConfig } from "../../interfaces/c1.interfaces";
 
 export class C1Plant extends Plant {
     private _config: C1PlantConfig;
