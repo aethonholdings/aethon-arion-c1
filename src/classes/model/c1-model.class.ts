@@ -13,11 +13,11 @@ import { C1Organisation } from "./../model-components/c1-organisation.class";
 import { C1Result } from "../presentation/c1-result.class";
 
 export class C1Model extends Model {
-    protected configurators: Configurator[] = [];
+    protected _configurators: Configurator[] = [];
 
     constructor() {
         super(C1ModelName);
-        this.configurators.push(new C1BaseConfigurator(this));
+        this._configurators.push(new C1BaseConfigurator(this));
     }
 
     getPerformance(resultDTO: ResultDTO): number | undefined {
