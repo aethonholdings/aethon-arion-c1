@@ -66,26 +66,5 @@ export const C1ReportingVariablesArray: string[] = [
     C1ReportingVariables.CLOCK_TICKS
 ];
 
-// Result set ----- NOT NEEDED ANYMORE
-export enum C1RegressionInputVariableColumnIndices {
-    AGENT_COUNT = 0,
-    INFLUENCE_NULL = 1,
-    INFLUENCE_RANDOM = 2,
-    INFLUENCE_HYBRID = 3,
-    INFLUENCE_PURPOSEFUL = 4,
-    JUDGMENT_NULL = 5,
-    JUDGMENT_RANDOM = 6,
-    JUDGMENT_HUBRID = 7,
-    JUDGMENT_PURPOSEFUL = 8,
-    INCENTIVE_NULL = 9,
-    INCENTIVE_RANDOM = 10,
-    INCENTIVE_HYBRID = 11,
-    INCENTIVE_PURPOSEFUL = 12,
-    INFLUENCE_GAIN = 13,
-    JUDGMENT_GAIN = 14,
-    INCENTIVE_GAIN = 15,
-    CLOCK_TICKS = 16
-}
-
 // The C1 model
 export const C1: C1Model = new C1Model();

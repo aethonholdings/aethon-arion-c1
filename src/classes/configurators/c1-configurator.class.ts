@@ -8,10 +8,8 @@ import {
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
 } from "../../constants/c1.model.constants";
-import { C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData, C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.interfaces";
 import { C1Model } from "../model/c1-model.class";
-
-export const c1ConfiguratorName: string = "C1Configurator";
 
 export class C1BaseConfigurator extends Configurator {
     stateCount: number = C1AgentStatesArray.length;
@@ -19,7 +17,7 @@ export class C1BaseConfigurator extends Configurator {
     reportingDegreesOfFreedom: number = C1ReportingVariablesArray.length;
 
     constructor(model: C1Model) {
-        super(model, c1ConfiguratorName);
+        super(model, c1BaseConfiguratorName);
     }
 
     generate(params: C1ConfiguratorParamsDTO): OrgConfigDTO {
@@ -169,4 +167,39 @@ export class C1BaseConfigurator extends Configurator {
         configDTO.incentiveIntensity = Utils.modulo(agentSetTensors.incentiveTensor);
         return configDTO;
     }
+
+    getDefaultParams(): C1ConfiguratorParamsDTO {
+        return {
+            modelName: C1ModelName,
+            configuratorName: c1BaseConfiguratorName,
+            data: c1BaseConfiguratorDefaultData,
+            hash: this.model.hashObject(c1BaseConfiguratorDefaultData)
+        };
+    }
 }
+
+export const c1BaseConfiguratorName: string = "C1Configurator";
+export const c1BaseConfiguratorDefaultData: C1ConfiguratorParamData = {
+        spans: 1,
+        layers: 1,
+        gains: {
+            influence: 0.00001,
+            judgment: 0.00001,
+            incentive: 0.00000001
+        },
+        actionStateProbability: 0.85,
+        graph: "teams",
+        matrixInit: {
+            influence: "random",
+            judgment: "random",
+            incentive: "random"
+        },
+        reporting: {
+            unitPayroll: 1,
+            unitPrice: 1
+        },
+        board: {
+            controlStep: false
+        }
+    };
+    
