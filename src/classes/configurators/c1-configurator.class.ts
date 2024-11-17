@@ -20,7 +20,6 @@ export class C1BaseConfigurator extends Configurator {
 
     constructor(model: C1Model) {
         super(model, c1ConfiguratorName);
-        this.model = model;
     }
 
     generate(params: C1ConfiguratorParamsDTO): OrgConfigDTO {
