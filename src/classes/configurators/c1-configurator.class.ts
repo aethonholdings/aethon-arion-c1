@@ -1,4 +1,4 @@
-import { AgentSetTensorsDTO, Utils, Configurator, OrgConfigDTO } from "aethon-arion-pipeline";
+import { AgentSetTensorsDTO, Utils, Configurator, OrgConfigDTO, ConfiguratorParamsDTO } from "aethon-arion-pipeline";
 import {
     C1AgentStateIndex,
     C1AgentStatesArray,
@@ -8,7 +8,7 @@ import {
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
 } from "../../constants/c1.model.constants";
-import { C1ConfiguratorParamData, C1ConfiguratorParamsDTO, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.interfaces";
 import { C1Model } from "../model/c1-model.class";
 
 export class C1BaseConfigurator extends Configurator {
@@ -20,7 +20,7 @@ export class C1BaseConfigurator extends Configurator {
         super(model, c1BaseConfiguratorName);
     }
 
-    generate(params: C1ConfiguratorParamsDTO): OrgConfigDTO {
+    generate(params: ConfiguratorParamsDTO<C1ConfiguratorParamData>): OrgConfigDTO {
         let agentCount: number;
         params.data.spans > 1
             ? (agentCount = (params.data.spans ** params.data.layers - 1) / (params.data.spans - 1))
@@ -168,7 +168,7 @@ export class C1BaseConfigurator extends Configurator {
         return configDTO;
     }
 
-    getDefaultParams(): C1ConfiguratorParamsDTO {
+    getDefaultParams(): ConfiguratorParamsDTO<C1ConfiguratorParamData> {
         return {
             modelName: C1ModelName,
             configuratorName: c1BaseConfiguratorName,
@@ -180,26 +180,25 @@ export class C1BaseConfigurator extends Configurator {
 
 export const c1BaseConfiguratorName: string = "C1Configurator";
 export const c1BaseConfiguratorDefaultData: C1ConfiguratorParamData = {
-        spans: 1,
-        layers: 1,
-        gains: {
-            influence: 0.00001,
-            judgment: 0.00001,
-            incentive: 0.00000001
-        },
-        actionStateProbability: 0.85,
-        graph: "teams",
-        matrixInit: {
-            influence: "random",
-            judgment: "random",
-            incentive: "random"
-        },
-        reporting: {
-            unitPayroll: 1,
-            unitPrice: 1
-        },
-        board: {
-            controlStep: false
-        }
-    };
-    
+    spans: 1,
+    layers: 1,
+    gains: {
+        influence: 0.00001,
+        judgment: 0.00001,
+        incentive: 0.00000001
+    },
+    actionStateProbability: 0.85,
+    graph: "teams",
+    matrixInit: {
+        influence: "random",
+        judgment: "random",
+        incentive: "random"
+    },
+    reporting: {
+        unitPayroll: 1,
+        unitPrice: 1
+    },
+    board: {
+        controlStep: false
+    }
+};

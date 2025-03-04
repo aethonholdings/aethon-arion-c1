@@ -1,23 +1,12 @@
-import {
-    Configurator,
-    Logger,
-    Model,
-    Organisation,
-    RandomStreamFactory,
-    ResultDTO,
-    SimulationConfig
-} from "aethon-arion-pipeline";
+import { Logger, Model, Organisation, RandomStreamFactory, ResultDTO, SimulationConfig } from "aethon-arion-pipeline";
 import { C1ModelName, C1ReportingVariablesIndex } from "../../constants/c1.model.constants";
-import { C1BaseConfigurator } from "./../configurators/c1-configurator.class";
-import { C1Organisation } from "./../model-components/c1-organisation.class";
-import { C1Result } from "../presentation/c1-result.class";
+import { C1Organisation } from "../core/c1-organisation.class";
+import { C1Result } from "../analysis/c1-result.class";
+import { C1BaseConfigurator } from "../configurators/c1-configurator.class";
 
 export class C1Model extends Model {
-    protected _configurators: Configurator[] = [];
-
     constructor() {
         super(C1ModelName);
-        this._configurators.push(new C1BaseConfigurator(this));
     }
 
     getPerformance(resultDTO: ResultDTO): number | undefined {
@@ -40,5 +29,7 @@ export class C1Model extends Model {
         return new C1Organisation(simConfig, randomStreamFactory, logger);
     }
 
-    
+    protected initialiseConfigurators(): void {
+        this._configurators = [new C1BaseConfigurator(this)];
+    }
 }

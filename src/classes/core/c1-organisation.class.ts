@@ -1,12 +1,10 @@
-import { Organisation, RandomStreamFactory, Logger, OrgModelConfig, SimulationConfig } from "aethon-arion-pipeline";
+import { Organisation, RandomStreamFactory, Logger, SimulationConfig } from "aethon-arion-pipeline";
 import { C1Plant } from "./c1-plant.class";
 import { C1Reporting } from "./c1-reporting.class";
 import { C1Board } from "./c1-board.class";
 import { C1AgentSet } from "./c1-agent-set.class";
 
 export class C1Organisation extends Organisation {
-    private _config: OrgModelConfig;
-
     constructor(simConfig: SimulationConfig, randomStreamFactory: RandomStreamFactory, logger: Logger) {
         logger.trace({ sourceObject: "Organisation", message: "Initialising C1 Organisation model" });
         const orgConfig = simConfig.orgConfig;
@@ -17,7 +15,6 @@ export class C1Organisation extends Organisation {
             const reporting = new C1Reporting(orgConfig, logger);
             const board = new C1Board(orgConfig, clockTicks, reporting.getReportingTensor(), logger);
             super(board, agentSet, plant, reporting, logger);
-            this._config = orgConfig;
             this._log("C1 Organisation model initialised");
         } else {
             throw new Error("No OrgConfig found for SimulationConfig");

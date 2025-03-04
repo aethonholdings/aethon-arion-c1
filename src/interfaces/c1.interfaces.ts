@@ -1,17 +1,7 @@
-import {
-    PlantConfig,
-    ReportingConfig,
-    ConfiguratorParamsDTO,
-    ConfiguratorParamData,
-    BoardConfig
-} from "aethon-arion-pipeline";
+import { PlantConfig, ReportingConfig, ConfiguratorParamData, BoardConfig } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType } from "../types/c1.types";
 
 // CONFIG ---------------------------------
-export interface C1ConfiguratorParamsDTO extends ConfiguratorParamsDTO {
-    data: C1ConfiguratorParamData;
-}
-
 export interface C1ConfiguratorParamData extends ConfiguratorParamData {
     spans: number; // org chart spans
     layers: number; // org chart layers
@@ -42,6 +32,5 @@ export interface C1ReportingConfig extends ReportingConfig {
 }
 
 export interface C1BoardConfig extends BoardConfig {
-    controlStep: boolean; 
+    controlStep: boolean;
 }
-
