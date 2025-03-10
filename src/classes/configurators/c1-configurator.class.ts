@@ -172,8 +172,7 @@ export class C1BaseConfigurator extends Configurator {
         return {
             modelName: C1ModelName,
             configuratorName: c1BaseConfiguratorName,
-            data: c1BaseConfiguratorDefaultData,
-            hash: this.model.hashObject(c1BaseConfiguratorDefaultData)
+            data: c1BaseConfiguratorDefaultData
         };
     }
 }

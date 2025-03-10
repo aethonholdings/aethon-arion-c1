@@ -7,6 +7,7 @@ import { C1BaseConfigurator } from "../configurators/c1-configurator.class";
 export class C1Model extends Model {
     constructor() {
         super(C1ModelName);
+        this._configurators.push(new C1BaseConfigurator(this));
     }
 
     getPerformance(resultDTO: ResultDTO): number | undefined {
@@ -21,15 +22,11 @@ export class C1Model extends Model {
         return new C1Result(resultDTO);
     }
 
-    protected createNewOrganisationInstance(
+    protected _instantiateModelOrgConfig(
         simConfig: SimulationConfig,
         randomStreamFactory: RandomStreamFactory,
         logger: Logger
     ): Organisation {
         return new C1Organisation(simConfig, randomStreamFactory, logger);
-    }
-
-    protected initialiseConfigurators(): void {
-        this._configurators = [new C1BaseConfigurator(this)];
     }
 }
