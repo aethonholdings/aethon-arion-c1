@@ -8,7 +8,6 @@ import {
     Utils
 } from "aethon-arion-pipeline";
 import {
-    C1,
     C1AgentStateIndex,
     C1AgentStatesArray,
     C1PlantStateVariables,
@@ -17,10 +16,11 @@ import {
     C1ReportingVariablesIndex,
     KPIFactoryIndex
 } from "../../constants/c1.model.constants";
+import { C1Model } from "../pipeline/c1-model.class";
 
 export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory {
-    constructor() {
-        super(KPIFactoryIndex.PLAN_VS_ACTUALS, C1);
+    constructor(model: C1Model) {
+        super(KPIFactoryIndex.PLAN_VS_ACTUALS, model);
     }
 
     generate(resultDTO: ResultDTO): KPIDTO<PlanVsActualsKPIs> {
@@ -99,8 +99,8 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory {
                 });
                 variables.set(C1PlantStateVariables.ACTION, {
                     name: C1PlantStateVariables.ACTION,
-                    actual: plant[C1PlantStateVariablesIndex.ACTION],
-                    plan: plan[C1AgentStateIndex.ACTION]
+                    actual: resultDTO.plant[C1PlantStateVariablesIndex.ACTION],
+                    plan: plant[C1PlantStateVariablesIndex.ACTION]
                 });
 
                 // calculate the deltas
@@ -203,7 +203,6 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory {
                         }
                     ]
                 });
-
                 return this._package({
                     proFormas: reports,
                     priorityTensor: { actual: actualPriorityTensor, plan: targetPriorityTensor, delta: deltaTensor }

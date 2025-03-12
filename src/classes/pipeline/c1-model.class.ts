@@ -8,7 +8,7 @@ export class C1Model extends Model {
     constructor() {
         super(C1ModelName, C1ModelIndex);
         this._configurators.push(new C1BaseConfigurator(this));
-        this._kpiFactories.push(new C1PlanVsActualsReport())
+        this._kpiFactories.push(new C1PlanVsActualsReport(this));
     }
 
     getPerformance(resultDTO: ResultDTO): number | undefined {
