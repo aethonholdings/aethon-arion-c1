@@ -1,4 +1,5 @@
-import { C1Model } from "../classes/model/c1-model.class";
+import { ModelIndexDTO } from "aethon-arion-pipeline";
+import { C1Model } from "../classes/pipeline/c1-model.class";
 
 // BASE CONSTANTS --------------------------------
 export const C1ModelName: string = "C1";
@@ -65,6 +66,55 @@ export const C1ReportingVariablesArray: string[] = [
     C1ReportingVariables.CLOCK_TICK_SECONDS,
     C1ReportingVariables.CLOCK_TICKS
 ];
+
+export const C1ModelIndex: ModelIndexDTO = {
+    reporting: {
+        variableNames: C1ReportingVariablesArray,
+        arrayIndex: {
+            [C1ReportingVariables.REVENUE]: C1ReportingVariablesIndex.REVENUE,
+            [C1ReportingVariables.PAYROLL]: C1ReportingVariablesIndex.PAYROLL,
+            [C1ReportingVariables.NET_INCOME]: C1ReportingVariablesIndex.NET_INCOME,
+            [C1ReportingVariables.HEADCOUNT]: C1ReportingVariablesIndex.HEADCOUNT,
+            [C1ReportingVariables.UNIT_PAYROLL]: C1ReportingVariablesIndex.UNIT_PAYROLL,
+            [C1ReportingVariables.UNIT_PRICE]: C1ReportingVariablesIndex.UNIT_PRICE,
+            [C1ReportingVariables.CLOCK_TICK_SECONDS]: C1ReportingVariablesIndex.CLOCK_TICK_SECONDS,
+            [C1ReportingVariables.CLOCK_TICKS]: C1ReportingVariablesIndex.CLOCK_TICKS
+        }
+    },
+    plant: {
+        variableNames: C1PlantStateVariablesArray,
+        arrayIndex: {
+            [C1PlantStateVariables.ACTION]: C1PlantStateVariablesIndex.ACTION
+        }
+    },
+    agentSet: {
+        states: {
+            variableNames: C1AgentStatesArray,
+            arrayIndex: {
+                [C1AgentStates.ACTION]: C1AgentStateIndex.ACTION,
+                [C1AgentStates.SELF]: C1AgentStateIndex.SELF
+            }
+        }
+    },
+    board: {
+        variableNames: C1ReportingVariablesArray,
+        arrayIndex: {
+            [C1ReportingVariables.REVENUE]: C1ReportingVariablesIndex.REVENUE,
+            [C1ReportingVariables.PAYROLL]: C1ReportingVariablesIndex.PAYROLL,
+            [C1ReportingVariables.NET_INCOME]: C1ReportingVariablesIndex.NET_INCOME,
+            [C1ReportingVariables.HEADCOUNT]: C1ReportingVariablesIndex.HEADCOUNT,
+            [C1ReportingVariables.UNIT_PAYROLL]: C1ReportingVariablesIndex.UNIT_PAYROLL,
+            [C1ReportingVariables.UNIT_PRICE]: C1ReportingVariablesIndex.UNIT_PRICE,
+            [C1ReportingVariables.CLOCK_TICK_SECONDS]: C1ReportingVariablesIndex.CLOCK_TICK_SECONDS,
+            [C1ReportingVariables.CLOCK_TICKS]: C1ReportingVariablesIndex.CLOCK_TICKS
+        }
+    }
+};
+
+// REPORTS  ---------------------------------
+export enum KPIFactoryIndex {
+    PLAN_VS_ACTUALS = "Plan vs Actuals"
+}
 
 // The C1 model
 export const C1: C1Model = new C1Model();

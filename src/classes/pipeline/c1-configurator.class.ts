@@ -9,7 +9,7 @@ import {
     C1ReportingVariablesIndex
 } from "../../constants/c1.model.constants";
 import { C1ConfiguratorParamData, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.interfaces";
-import { C1Model } from "../model/c1-model.class";
+import { C1Model } from "../pipeline/c1-model.class";
 
 export class C1BaseConfigurator extends Configurator {
     stateCount: number = C1AgentStatesArray.length;

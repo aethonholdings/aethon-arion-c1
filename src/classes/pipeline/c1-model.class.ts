@@ -1,13 +1,14 @@
 import { Logger, Model, Organisation, RandomStreamFactory, ResultDTO, SimulationConfig } from "aethon-arion-pipeline";
-import { C1ModelName, C1ReportingVariablesIndex } from "../../constants/c1.model.constants";
+import { C1ModelIndex, C1ModelName, C1ReportingVariablesIndex } from "../../constants/c1.model.constants";
 import { C1Organisation } from "../core/c1-organisation.class";
-import { C1Result } from "../analysis/c1-result.class";
 import { C1BaseConfigurator } from "../configurators/c1-configurator.class";
+import { C1PlanVsActualsReport } from "../analysis/c1-plan-vs-actuals.kpi-factory.class";
 
 export class C1Model extends Model {
     constructor() {
-        super(C1ModelName);
+        super(C1ModelName, C1ModelIndex);
         this._configurators.push(new C1BaseConfigurator(this));
+        this._kpiFactories.push(new C1PlanVsActualsReport())
     }
 
     getPerformance(resultDTO: ResultDTO): number | undefined {
@@ -16,10 +17,6 @@ export class C1Model extends Model {
         if (headcount === 0) return undefined;
         const revenue = reportingTensor[C1ReportingVariablesIndex.REVENUE];
         return revenue / headcount;
-    }
-
-    createResult(resultDTO: ResultDTO): C1Result {
-        return new C1Result(resultDTO);
     }
 
     protected _instantiateModelOrgConfig(
