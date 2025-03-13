@@ -1,4 +1,5 @@
 import {
+    GradientAscentDTO,
     Logger,
     Model,
     Optimiser,
@@ -10,7 +11,7 @@ import {
 import { C1ModelIndex, C1ModelName, C1ReportingVariablesIndex } from "../../constants/c1.model.constants";
 import { C1Organisation } from "../core/c1-organisation.class";
 import { C1PlanVsActualsReport } from "../analysis/c1-plan-vs-actuals.kpi-factory.class";
-import { C1ConfiguratorParamData, GradientAscentDTO } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData } from "../../interfaces/c1.interfaces";
 import { C1BaseConfigurator } from "./c1-base-configurator.class";
 import { GradientAscentOptimiser } from "./c1-gradient-ascent.optimiser.class";
 

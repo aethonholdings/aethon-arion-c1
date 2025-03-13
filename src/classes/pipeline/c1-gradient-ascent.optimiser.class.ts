@@ -1,7 +1,7 @@
-import { ConfiguratorParamData } from "aethon-arion-pipeline/src/types/pipeline.types";
 import { Optimiser } from "aethon-arion-pipeline/src/classes/pipeline/optimiser.class";
 import { C1GradientAscentOptimiserName } from "../../constants/c1.model.constants";
-import { C1ConfiguratorParamData, GradientAscentDTO } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData } from "../../interfaces/c1.interfaces";
+import { GradientAscentDTO } from "aethon-arion-pipeline";
 
 export class GradientAscentOptimiser extends Optimiser<C1ConfiguratorParamData, GradientAscentDTO> {
     constructor() {
@@ -9,7 +9,7 @@ export class GradientAscentOptimiser extends Optimiser<C1ConfiguratorParamData, 
         super(C1GradientAscentOptimiserName);
     }
 
-    next(configuratorParamData: ConfiguratorParamData): GradientAscentDTO {
+    next(configuratorParamData: C1ConfiguratorParamData): GradientAscentDTO {
         
         return {} as GradientAscentDTO;
     }

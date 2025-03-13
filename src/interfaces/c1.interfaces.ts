@@ -35,15 +35,3 @@ export interface C1BoardConfig extends BoardConfig {
     controlStep: boolean;
 }
 
-export interface GradientAscentDTO extends OptimiserData {
-    xName: string;
-    xValue: any;
-    x: number;
-    xDelta: number;
-    performance: number;
-    performanceDelta: number;
-    slope: number;
-    configuratorId: number;
-    state: StateType;
-}
-
