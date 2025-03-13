@@ -8,7 +8,6 @@ import {
     Utils
 } from "aethon-arion-pipeline";
 import {
-    C1AgentStateIndex,
     C1AgentStatesArray,
     C1PlantStateVariables,
     C1PlantStateVariablesIndex,
