@@ -1,4 +1,4 @@
-import { PlantConfig, ReportingConfig, ConfiguratorParamData, BoardConfig } from "aethon-arion-pipeline";
+import { PlantConfig, ReportingConfig, ConfiguratorParamData, BoardConfig, OptimiserData, StateType } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType } from "../types/c1.types";
 
 // CONFIG ---------------------------------
@@ -34,3 +34,16 @@ export interface C1ReportingConfig extends ReportingConfig {
 export interface C1BoardConfig extends BoardConfig {
     controlStep: boolean;
 }
+
+export interface GradientAscentDTO extends OptimiserData {
+    xName: string;
+    xValue: any;
+    x: number;
+    xDelta: number;
+    performance: number;
+    performanceDelta: number;
+    slope: number;
+    configuratorId: number;
+    state: StateType;
+}
+

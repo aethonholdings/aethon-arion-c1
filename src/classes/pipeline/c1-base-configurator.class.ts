@@ -8,10 +8,10 @@ import {
     C1ReportingVariablesArray,
     C1ReportingVariablesIndex
 } from "../../constants/c1.model.constants";
-import { C1ConfiguratorParamData, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData, C1PlantConfig, C1ReportingConfig, GradientAscentDTO } from "../../interfaces/c1.interfaces";
 import { C1Model } from "../pipeline/c1-model.class";
 
-export class C1BaseConfigurator extends Configurator {
+export class C1BaseConfigurator extends Configurator<C1ConfiguratorParamData, GradientAscentDTO> {
     stateCount: number = C1AgentStatesArray.length;
     plantDegreesOfFreedom: number = C1PlantStateVariablesArray.length;
     reportingDegreesOfFreedom: number = C1ReportingVariablesArray.length;

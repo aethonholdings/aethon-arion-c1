@@ -4,6 +4,7 @@ import { C1Model } from "../classes/pipeline/c1-model.class";
 // BASE CONSTANTS --------------------------------
 export const C1ModelName: string = "C1";
 export const C1ModelClockTickSeconds: number = 300;
+export const C1GradientAscentOptimiserName = "C1 Gradient Ascent Optimiser";
 
 // AGENT SET ---------------------------------
 export enum C1AgentStateIndex {

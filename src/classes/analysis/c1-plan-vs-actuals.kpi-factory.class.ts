@@ -16,8 +16,9 @@ import {
     KPIFactoryIndex
 } from "../../constants/c1.model.constants";
 import { C1Model } from "../pipeline/c1-model.class";
+import { C1ConfiguratorParamData, GradientAscentDTO } from "../../interfaces/c1.interfaces";
 
-export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory {
+export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<C1ConfiguratorParamData, GradientAscentDTO> {
     constructor(model: C1Model) {
         super(KPIFactoryIndex.PLAN_VS_ACTUALS, model);
     }
@@ -100,6 +101,11 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory {
                     name: C1PlantStateVariables.ACTION,
                     actual: resultDTO.plant[C1PlantStateVariablesIndex.ACTION],
                     plan: plant[C1PlantStateVariablesIndex.ACTION]
+                });
+                variables.set("Revenue per agent", {
+                    name: "Revenue per agent",
+                    actual: reporting[C1ReportingVariablesIndex.REVENUE]  / agentCount,
+                    plan: plan[C1ReportingVariablesIndex.REVENUE] / agentCount
                 });
 
                 // calculate the deltas
@@ -202,6 +208,15 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory {
                         }
                     ]
                 });
+                reports.push({
+                    name: "Agent performance",
+                    lineItems: [
+                        {
+                            class: "",
+                            operator: "",
+                            data: variables.get("Revenue per agent")
+                        }
+                    ]});
                 return this._package({
                     proFormas: reports,
                     priorityTensor: { actual: actualPriorityTensor, plan: targetPriorityTensor, delta: deltaTensor }
