@@ -1,6 +1,6 @@
 {
   "name": "aethon-arion-c1",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "The Arion C1 model and pipeline class implementations",
   "repository": "github:aethonholdings/aethon-arion-c1",
   "main": "dist/index.js",

@@ -12,11 +12,7 @@ export class C1Model extends Model {
     }
 
     getPerformance(resultDTO: ResultDTO): number | undefined {
-        const reportingTensor = resultDTO.reporting;
-        const headcount = reportingTensor[C1ReportingVariablesIndex.HEADCOUNT];
-        if (headcount === 0) return undefined;
-        const revenue = reportingTensor[C1ReportingVariablesIndex.REVENUE];
-        return revenue / headcount;
+        return resultDTO.reporting[C1ReportingVariablesIndex.REVENUE];
     }
 
     protected _instantiateModelOrgConfig(
