@@ -4,7 +4,9 @@ import {
     ConfiguratorParamData,
     BoardConfig,
     OptimiserData,
-    ParamSpaceDefinition
+    ParamSpaceDefinition,
+    ModelState,
+    OptimiserStateDTO
 } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType, C1GraphType } from "../types/c1.types";
 
