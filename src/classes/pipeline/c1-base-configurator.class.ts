@@ -1,4 +1,4 @@
-import { AgentSetTensorsDTO, Utils, Configurator, OrgConfigDTO, ConfiguratorParamsDTO, GradientAscentDTO } from "aethon-arion-pipeline";
+import { AgentSetTensorsDTO, Utils, Configurator, OrgConfigDTO, ConfiguratorParamsDTO } from "aethon-arion-pipeline";
 import {
     C1AgentStateIndex,
     C1AgentStatesArray,
@@ -11,7 +11,7 @@ import {
 import { C1ConfiguratorParamData, C1PlantConfig, C1ReportingConfig } from "../../interfaces/c1.interfaces";
 import { C1Model } from "../pipeline/c1-model.class";
 
-export class C1BaseConfigurator extends Configurator<C1ConfiguratorParamData, GradientAscentDTO> {
+export class C1BaseConfigurator extends Configurator<C1ConfiguratorParamData> {
     stateCount: number = C1AgentStatesArray.length;
     plantDegreesOfFreedom: number = C1PlantStateVariablesArray.length;
     reportingDegreesOfFreedom: number = C1ReportingVariablesArray.length;

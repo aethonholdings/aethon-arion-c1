@@ -1,12 +1,13 @@
 import { ModelIndexDTO } from "aethon-arion-pipeline";
 import { C1Model } from "../classes/pipeline/c1-model.class";
+import { C1ParamSpaceDefinition } from "../interfaces/c1.interfaces";
 
 // BASE CONSTANTS --------------------------------
 export const C1ModelName: string = "C1";
 export const C1ModelClockTickSeconds: number = 300;
 export const C1GradientAscentOptimiserName = "C1 Gradient Ascent Optimiser";
 
-// AGENT SET ---------------------------------
+// AGENT SET -------------------------------------
 export enum C1AgentStateIndex {
     ACTION = 0,
     SELF = 1
@@ -19,8 +20,7 @@ export enum C1AgentStates {
 
 export const C1AgentStatesArray: string[] = [C1AgentStates.ACTION, C1AgentStates.SELF];
 
-// PLANT STATE VARIABLES -------------------------------
-
+// PLANT STATE VARIABLES -------------------------
 export enum C1PlantStateVariablesIndex {
     ACTION = 0
 }
@@ -30,7 +30,6 @@ export enum C1PlantStateVariables {
 }
 
 export const C1PlantStateVariablesArray: string[] = [C1PlantStateVariables.ACTION];
-
 export const C1PlantStateTarget: number[] = [1];
 export const C1PlantStateIdle: number[] = [0];
 

@@ -1,7 +1,14 @@
-import { PlantConfig, ReportingConfig, ConfiguratorParamData, BoardConfig, OptimiserData, StateType } from "aethon-arion-pipeline";
-import { C1ConfiguratorInitType } from "../types/c1.types";
+import {
+    PlantConfig,
+    ReportingConfig,
+    ConfiguratorParamData,
+    BoardConfig,
+    OptimiserData,
+    ParamSpaceDefinition
+} from "aethon-arion-pipeline";
+import { C1ConfiguratorInitType, C1GraphType } from "../types/c1.types";
 
-// CONFIG ---------------------------------
+// CONFIGURATOR ---------------------------------
 export interface C1ConfiguratorParamData extends ConfiguratorParamData {
     spans: number; // org chart spans
     layers: number; // org chart layers
@@ -10,7 +17,7 @@ export interface C1ConfiguratorParamData extends ConfiguratorParamData {
         judgment: number; // gain applied to initialised tensor kernel in [0,1] range
         incentive: number; // gain applied to initialised tensor kernel in [0,1] range
     };
-    graph: "top-down" | "teams"; // top-down is a typical tree org | teams is an org where each team is interconnected in an influence lattive
+    graph: C1GraphType; // top-down is a typical tree org | teams is an org where each team is interconnected in an influence lattive
     actionStateProbability: number; // default is 85% (0.85) based on Johnson (1986)
     matrixInit: {
         influence: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
@@ -35,3 +42,38 @@ export interface C1BoardConfig extends BoardConfig {
     controlStep: boolean;
 }
 
+// OPTIMISER ---------------------------------
+export interface C1ParamSpaceDefinition extends ParamSpaceDefinition {
+    spans: number[];
+    layers: number[];
+    gains: {
+        influence: number[];
+        judgment: number[];
+        incentive: number[];
+    };
+    graph: string[];
+    actionStateProbability: number[];
+    matrixInit: {
+        influence: C1ConfiguratorInitType[];
+        judgment: C1ConfiguratorInitType[];
+        incentive: C1ConfiguratorInitType[];
+    };
+    board: boolean[];
+    reporting: C1ReportingConfig[];
+}
+
+export interface C1OptimiserData extends OptimiserData {
+    derivativeStepSize: {
+        spans: number;
+        layers: number;
+        gains: {
+            influence: number;
+            judgment: number;
+            incentive: number;
+        };
+        actionStateProbability: number;
+    },
+    learningRate: number;
+    tolerance: number;
+    maxIterations?: number;
+}

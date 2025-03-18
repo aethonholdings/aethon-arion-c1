@@ -1,5 +1,4 @@
 import {
-    GradientAscentDTO,
     Logger,
     Model,
     Optimiser,
@@ -13,16 +12,13 @@ import { C1Organisation } from "../core/c1-organisation.class";
 import { C1PlanVsActualsReport } from "../analysis/c1-plan-vs-actuals.kpi-factory.class";
 import { C1ConfiguratorParamData } from "../../interfaces/c1.interfaces";
 import { C1BaseConfigurator } from "./c1-base-configurator.class";
-import { GradientAscentOptimiser } from "./c1-gradient-ascent.optimiser.class";
+import { C1GradientAscentOptimiser } from "../optimisers/c1-gradient-ascent.optimiser.class";
 
-export class C1Model extends Model<C1ConfiguratorParamData, GradientAscentDTO> {
+export class C1Model extends Model<C1ConfiguratorParamData> {
     constructor() {
         // this casting is required in order to bypass a compiler error with type checking
-        const optimiser = new GradientAscentOptimiser() as unknown as Optimiser<
-            C1ConfiguratorParamData,
-            GradientAscentDTO
-        >;
-        super(C1ModelName, C1ModelIndex, optimiser);
+        super(C1ModelName, C1ModelIndex);
+        this._optimisers.push(new C1GradientAscentOptimiser(this)) as unknown as Optimiser<C1ConfiguratorParamData>;
         this._configurators.push(new C1BaseConfigurator(this));
         this._kpiFactories.push(new C1PlanVsActualsReport(this));
     }
