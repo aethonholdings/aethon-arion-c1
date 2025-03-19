@@ -1,5 +1,9 @@
 import { C1GradientAscentOptimiserName } from "../../constants/c1.model.constants";
-import { C1ConfiguratorParamData, C1OptimiserDerivativeStepSize, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
+import {
+    C1ConfiguratorParamData,
+    C1OptimiserDerivativeStepSize,
+    C1ParamSpaceDefinition
+} from "../../interfaces/c1.interfaces";
 import {
     GradientAscentOptimiser,
     Model,
@@ -68,6 +72,19 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             } as GradientAscentOptimiserStateData<C1ConfiguratorParamData>;
             return tmp;
         }
+    }
+
+    getStateRequiredSimConfigs(
+        state: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>
+    ): C1ConfiguratorParamData[] {
+        const simConfigs = [] as C1ConfiguratorParamData[];
+        if (state && state.optimiserData && state.optimiserData.gradient) {
+            for (let partialDerivative of state.optimiserData.gradient) {
+                simConfigs.push(partialDerivative.configuratorParams);
+            }
+        }
+        simConfigs.push(state.optimiserData.x);
+        return simConfigs;
     }
 
     private _getRandomInit(matrixInit: {
@@ -225,8 +242,8 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         let tmp: number = 1;
         if (valueName !== "graph") {
             tmp = stepSize;
-            if (initValue + tmp <= bounds[this._boundIndices.MAX]) tmp = 0;
-            dx.configuratorParameterValue = tmp;
+            if (initValue + tmp > bounds[this._boundIndices.MAX]) tmp = 0;
+            dx.configuratorParameterValue = initValue + tmp;
         }
         dx.xDelta = tmp;
         dx.xPlusDelta = initValue + tmp;

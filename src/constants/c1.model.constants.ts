@@ -126,7 +126,7 @@ export const C1GradientAscentParameterDTO: GradientAscentParameterDTO<C1ParamSpa
         gains: {
             influence: [0, 1],
             judgment: [0, 1],
-            incentive: [0, 1]
+            incentive: [0, 0.0001]
         },
         graph: ["top-down", "teams"],
         actionStateProbability: [0.85, 0.85],
@@ -141,7 +141,7 @@ export const C1GradientAscentParameterDTO: GradientAscentParameterDTO<C1ParamSpa
         gains: {
             influence: 0.002,
             judgment: 0.002,
-            incentive: 100
+            incentive: 0.000001
         },
         actionStateProbability: 0.01,
     }
