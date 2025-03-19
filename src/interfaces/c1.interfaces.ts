@@ -3,7 +3,6 @@ import {
     ReportingConfig,
     ConfiguratorParamData,
     BoardConfig,
-    OptimiserData,
     OptimiserParameters,
 } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType, C1GraphType } from "../types/c1.types";
@@ -61,7 +60,7 @@ export interface C1ParamSpaceDefinition {
     board: boolean[];
 }
 
-export interface C1OptimiserData extends OptimiserData {
+export interface C1OptimiserParameters extends OptimiserParameters {
     derivativeStepSize: {
         spans: number;
         layers: number;
@@ -75,4 +74,13 @@ export interface C1OptimiserData extends OptimiserData {
     learningRate: number;
     tolerance: number;
     maxIterations?: number;
+}
+
+export interface C1OptimiserDerivativeStepSize {
+    gains: {
+        influence: number;
+        judgment: number;
+        incentive: number;
+    };
+    actionStateProbability: number;
 }

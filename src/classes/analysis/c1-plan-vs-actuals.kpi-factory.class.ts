@@ -1,4 +1,5 @@
 import {
+    GradientAscentOptimiserStateData,
     GradientAscentParameterDTO,
     KPIDTO,
     PlanVsActualsKPIFactory,
@@ -17,9 +18,13 @@ import {
     KPIFactoryIndex
 } from "../../constants/c1.model.constants";
 import { C1Model } from "../pipeline/c1-model.class";
-import { C1ConfiguratorParamData, C1OptimiserData, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData, C1OptimiserDerivativeStepSize, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
 
-export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<C1ConfiguratorParamData, GradientAscentParameterDTO<C1ParamSpaceDefinition>, C1OptimiserData> {
+export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<
+    C1ConfiguratorParamData,
+    GradientAscentParameterDTO<C1ParamSpaceDefinition, C1OptimiserDerivativeStepSize>,
+    GradientAscentOptimiserStateData<C1ConfiguratorParamData>
+> {
     constructor(model: C1Model) {
         super(KPIFactoryIndex.PLAN_VS_ACTUALS, model);
     }
@@ -105,7 +110,7 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<C1Configurato
                 });
                 variables.set("Revenue per agent", {
                     name: "Revenue per agent",
-                    actual: reporting[C1ReportingVariablesIndex.REVENUE]  / agentCount,
+                    actual: reporting[C1ReportingVariablesIndex.REVENUE] / agentCount,
                     plan: plan[C1ReportingVariablesIndex.REVENUE] / agentCount
                 });
 
@@ -217,7 +222,8 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<C1Configurato
                             operator: "",
                             data: variables.get("Revenue per agent")
                         }
-                    ]});
+                    ]
+                });
                 return this._package({
                     proFormas: reports,
                     priorityTensor: { actual: actualPriorityTensor, plan: targetPriorityTensor, delta: deltaTensor }
