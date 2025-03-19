@@ -1,21 +1,18 @@
 import { C1GradientAscentOptimiserName } from "../../constants/c1.model.constants";
-import { C1ConfiguratorParamData, C1OptimiserData, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
 import {
     GradientAscentOptimiser,
     Model,
     Gradient,
-    GradientAscentPartialDerivativeDTO
+    GradientAscentPartialDerivativeDTO,
+    GradientAscentParameterDTO
 } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType } from "../../types/c1.types";
 
 export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     C1ConfiguratorParamData,
-    C1ParamSpaceDefinition
+    GradientAscentParameterDTO<C1ParamSpaceDefinition>
 > {
-    private _boundIndices = {
-        MAX: 0,
-        MIN: 1
-    };
     private _derivativeStepSize?: {
         spans: number;
         layers: number;
@@ -26,13 +23,13 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         };
         actionStateProbability: number;
     };
-    graphMappings = {
-        teams: 0,
+    private graphMappings = {
+        "teams": 0,
         "top-down": 1
     };
 
-    constructor(model: Model<C1ConfiguratorParamData>) {
-        super(C1GradientAscentOptimiserName, model);
+    constructor(model: Model<C1ConfiguratorParamData, GradientAscentParameterDTO<C1ParamSpaceDefinition>>, parameters: GradientAscentParameterDTO<C1ParamSpaceDefinition>) {
+        super(C1GradientAscentOptimiserName, model, parameters);
     }
 
     getRandomInit(matrixInit: {
@@ -40,34 +37,34 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         judgment: C1ConfiguratorInitType;
         incentive: C1ConfiguratorInitType;
     }): C1ConfiguratorParamData {
-        if (this._init && this._parameterSpaceDefinition) {
+        if (this._parameters && this._parameters.parameterSpaceDefinition) {
             // return a random point in the parameter space
             const randomInit = {} as C1ConfiguratorParamData;
             randomInit.spans = this._getRandomInit(
-                this._parameterSpaceDefinition.spans[this._boundIndices.MIN],
-                this._parameterSpaceDefinition.spans[this._boundIndices.MAX]
+                this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MIN],
+                this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MAX]
             );
             randomInit.layers = this._getRandomInit(
-                this._parameterSpaceDefinition.layers[this._boundIndices.MIN],
-                this._parameterSpaceDefinition.layers[this._boundIndices.MAX]
+                this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MIN],
+                this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MAX]
             );
             randomInit.gains = {
                 influence: this._getRandomInit(
-                    this._parameterSpaceDefinition.gains.influence[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.gains.influence[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MAX]
                 ),
                 judgment: this._getRandomInit(
-                    this._parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX]
                 ),
                 incentive: this._getRandomInit(
-                    this._parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX]
                 )
             };
             randomInit.actionStateProbability = this._getRandomInit(
-                this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN],
-                this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX]
+                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN],
+                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX]
             );
             Math.random() > 0.5 ? (randomInit.graph = "top-down") : (randomInit.graph = "teams");
             randomInit.board.controlStep = false;
@@ -83,11 +80,10 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     }
 
     getGradient(configuratorParamData: C1ConfiguratorParamData): Gradient<C1ConfiguratorParamData> {
-        if (this._init && this._derivativeStepSize && this._parameterSpaceDefinition) {
+        if (this._derivativeStepSize && this._parameters) {
             this._validateConfiguratorParamData(configuratorParamData);
             // calculate the partial derivative along each optimisation dimension
             let del = [] as Gradient<C1ConfiguratorParamData>;
-            let tmp: number;
 
             // dx(spans)
             del.push(
@@ -95,7 +91,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     "spans",
                     configuratorParamData.spans,
                     this._derivativeStepSize.spans,
-                    this._parameterSpaceDefinition.spans
+                    this._parameters.parameterSpaceDefinition.spans
                 )
             );
 
@@ -105,7 +101,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     "layers",
                     configuratorParamData.layers,
                     this._derivativeStepSize.layers,
-                    this._parameterSpaceDefinition.layers
+                    this._parameters.parameterSpaceDefinition.layers
                 )
             );
 
@@ -117,7 +113,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     "gains.influence",
                     configuratorParamData.gains.influence,
                     this._derivativeStepSize.gains.influence,
-                    this._parameterSpaceDefinition.gains.influence
+                    this._parameters.parameterSpaceDefinition.gains.influence
                 )
             );
 
@@ -127,7 +123,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     "gains.judgment",
                     configuratorParamData.gains.judgment,
                     this._derivativeStepSize.gains.judgment,
-                    this._parameterSpaceDefinition.gains.judgment
+                    this._parameters.parameterSpaceDefinition.gains.judgment 
                 )
             );
 
@@ -137,7 +133,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     "gains.incentive",
                     configuratorParamData.gains.incentive,
                     this._derivativeStepSize.gains.incentive,
-                    this._parameterSpaceDefinition.gains.incentive
+                    this._parameters.parameterSpaceDefinition.gains.incentive
                 )
             );
 
@@ -147,7 +143,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     "actionStateProbability",
                     configuratorParamData.actionStateProbability,
                     this._derivativeStepSize.actionStateProbability,
-                    this._parameterSpaceDefinition.actionStateProbability
+                    this._parameters.parameterSpaceDefinition.actionStateProbability
                 )
             );
 
@@ -157,7 +153,10 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         }
     }
 
-    getNextPoint(configuratorParamData: C1ConfiguratorParamData, gradient: Gradient<C1ConfiguratorParamData>): C1ConfiguratorParamData {
+    getNextPoint(
+        configuratorParamData: C1ConfiguratorParamData,
+        gradient: Gradient<C1ConfiguratorParamData>
+    ): C1ConfiguratorParamData {
         return {} as C1ConfiguratorParamData;
     }
 
@@ -188,53 +187,53 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     }
 
     protected _validateConfiguratorParamData(configuratorParamData: C1ConfiguratorParamData): void {
-        if (this._init && this._parameterSpaceDefinition) {
+        if (this._parameters) {
             // check that the point is within the parameter space
             if (
                 !this._checkRange(
                     configuratorParamData.spans,
-                    this._parameterSpaceDefinition.spans[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.spans[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MAX]
                 )
             )
                 throw new Error("The number of spans must be within the range of the parameter space");
             if (
                 !this._checkRange(
                     configuratorParamData.layers,
-                    this._parameterSpaceDefinition.layers[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.layers[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MAX]
                 )
             )
                 throw new Error("The number of layers must be within the range of the parameter space");
             if (
                 !this._checkRange(
                     configuratorParamData.gains.influence,
-                    this._parameterSpaceDefinition.gains.influence[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.gains.influence[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MAX]
                 )
             )
                 throw new Error("The influence gain must be within the range of the parameter space");
             if (
                 !this._checkRange(
                     configuratorParamData.gains.judgment,
-                    this._parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX]
                 )
             )
                 throw new Error("The judgment gain must be within the range of the parameter space");
             if (
                 !this._checkRange(
                     configuratorParamData.gains.incentive,
-                    this._parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX]
                 )
             )
                 throw new Error("The incentive gain must be within the range of the parameter space");
             if (
                 !this._checkRange(
                     configuratorParamData.actionStateProbability,
-                    this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN],
-                    this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX]
+                    this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX]
                 )
             )
                 throw new Error("The action state probability must be within the range of the parameter space");
@@ -248,54 +247,54 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     }
 
     protected _checkBounds() {
-        if (this._init && this._parameterSpaceDefinition) {
+        if (this._parameters.parameterSpaceDefinition) {
             if (
-                this._parameterSpaceDefinition.spans[this._boundIndices.MAX] <=
-                this._parameterSpaceDefinition.spans[this._boundIndices.MIN]
+                this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MAX] <
+                this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MIN]
             ) {
                 throw new Error("The maximum span must be greater than the minimum span");
             }
             if (
-                this._parameterSpaceDefinition.layers[this._boundIndices.MAX] <=
-                this._parameterSpaceDefinition.layers[this._boundIndices.MIN]
+                this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MAX] <
+                this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MIN]
             ) {
                 throw new Error("The maximum layer must be greater than the minimum layer");
             }
             if (
-                this._parameterSpaceDefinition.gains.influence[this._boundIndices.MAX] <=
-                this._parameterSpaceDefinition.gains.influence[this._boundIndices.MIN]
+                this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MAX] <
+                this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MIN]
             ) {
                 throw new Error("The maximum influence gain must be greater than the minimum influence gain");
             }
             if (
-                this._parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX] <=
-                this._parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN]
+                this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX] <
+                this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN]
             ) {
                 throw new Error("The maximum judgment gain must be greater than the minimum judgment gain");
             }
             if (
-                this._parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX] <=
-                this._parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN]
+                this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX] <
+                this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN]
             ) {
                 throw new Error("The maximum incentive gain must be greater than the minimum incentive gain");
             }
             if (
-                this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] <=
-                this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN]
+                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] <
+                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN]
             ) {
                 throw new Error(
                     "The maximum action state probability must be greater than the minimum action state probability"
                 );
             }
             if (
-                this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] <= 0 ||
-                this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] >= 1
+                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] <= 0 ||
+                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] >= 1
             ) {
                 throw new Error("The maximum action state probability must be in the range [0,1]");
             }
             if (
-                this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN] <= 0 ||
-                this._parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN] >= 1
+                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN] <= 0 ||
+                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN] >= 1
             ) {
                 throw new Error("The minimum action state probability must be in the range [0,1]");
             }

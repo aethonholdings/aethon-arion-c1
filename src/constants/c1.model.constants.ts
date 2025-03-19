@@ -1,4 +1,4 @@
-import { ModelIndexDTO } from "aethon-arion-pipeline";
+import { GradientAscentParameterDTO, ModelIndexDTO, OptimiserData } from "aethon-arion-pipeline";
 import { C1Model } from "../classes/pipeline/c1-model.class";
 import { C1ParamSpaceDefinition } from "../interfaces/c1.interfaces";
 
@@ -114,6 +114,45 @@ export const C1ModelIndex: ModelIndexDTO = {
 // REPORTS  ---------------------------------
 export enum KPIFactoryIndex {
     PLAN_VS_ACTUALS = "Plan vs Actuals"
+}
+
+// GRADIENT ASCENT  ---------------------------------
+export const C1GradientAscentParameterDTO: GradientAscentParameterDTO<C1ParamSpaceDefinition> = {
+    learningRate: 0.01,
+    tolerance: 0.0001,
+    parameterSpaceDefinition: {
+        spans: [1, 8],
+        layers: [1, 6],
+        gains: {
+            influence: [0, 1],
+            judgment: [0, 1],
+            incentive: [0, 1]
+        },
+        graph: ["top-down", "teams"],
+        actionStateProbability: [0.85, 0.85],
+        matrixInit: {
+            influence: ["purposeful"],
+            judgment: ["random"],
+            incentive: ["purposeful"]
+        },
+        board: [false]
+    }
+};
+
+export interface C1OptimiserData extends OptimiserData {
+    derivativeStepSize: {
+        spans: number;
+        layers: number;
+        gains: {
+            influence: number;
+            judgment: number;
+            incentive: number;
+        };
+        actionStateProbability: number;
+    };
+    learningRate: number;
+    tolerance: number;
+    maxIterations?: number;
 }
 
 // The C1 model

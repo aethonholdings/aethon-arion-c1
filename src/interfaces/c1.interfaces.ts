@@ -4,9 +4,7 @@ import {
     ConfiguratorParamData,
     BoardConfig,
     OptimiserData,
-    ParamSpaceDefinition,
-    ModelState,
-    OptimiserStateDTO
+    OptimiserParameters,
 } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType, C1GraphType } from "../types/c1.types";
 
@@ -45,7 +43,7 @@ export interface C1BoardConfig extends BoardConfig {
 }
 
 // OPTIMISER ---------------------------------
-export interface C1ParamSpaceDefinition extends ParamSpaceDefinition {
+export interface C1ParamSpaceDefinition {
     spans: number[];
     layers: number[];
     gains: {
@@ -61,7 +59,6 @@ export interface C1ParamSpaceDefinition extends ParamSpaceDefinition {
         incentive: C1ConfiguratorInitType[];
     };
     board: boolean[];
-    reporting: C1ReportingConfig[];
 }
 
 export interface C1OptimiserData extends OptimiserData {
