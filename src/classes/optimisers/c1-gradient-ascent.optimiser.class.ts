@@ -61,7 +61,6 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 judgment: "random",
                 incentive: "purposeful"
             });
-            console.log(x);
             tmp.optimiserData = {
                 x: x,
                 hash: new ObjectHash(x).toString(),
