@@ -17,9 +17,9 @@ import {
     KPIFactoryIndex
 } from "../../constants/c1.model.constants";
 import { C1Model } from "../pipeline/c1-model.class";
-import { C1ConfiguratorParamData, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData, C1OptimiserData, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
 
-export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<C1ConfiguratorParamData, GradientAscentParameterDTO<C1ParamSpaceDefinition>> {
+export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<C1ConfiguratorParamData, GradientAscentParameterDTO<C1ParamSpaceDefinition>, C1OptimiserData> {
     constructor(model: C1Model) {
         super(KPIFactoryIndex.PLAN_VS_ACTUALS, model);
     }

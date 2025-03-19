@@ -1,17 +1,19 @@
 import { C1GradientAscentOptimiserName } from "../../constants/c1.model.constants";
-import { C1ConfiguratorParamData, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
+import { C1ConfiguratorParamData, C1OptimiserData, C1ParamSpaceDefinition } from "../../interfaces/c1.interfaces";
 import {
     GradientAscentOptimiser,
     Model,
     Gradient,
     GradientAscentPartialDerivativeDTO,
-    GradientAscentParameterDTO
+    GradientAscentParameterDTO,
+    OptimiserStateDTO
 } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType } from "../../types/c1.types";
 
 export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     C1ConfiguratorParamData,
-    GradientAscentParameterDTO<C1ParamSpaceDefinition>
+    GradientAscentParameterDTO<C1ParamSpaceDefinition>,
+    C1OptimiserData
 > {
     private _derivativeStepSize?: {
         spans: number;
@@ -28,8 +30,12 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         "top-down": 1
     };
 
-    constructor(model: Model<C1ConfiguratorParamData, GradientAscentParameterDTO<C1ParamSpaceDefinition>>, parameters: GradientAscentParameterDTO<C1ParamSpaceDefinition>) {
+    constructor(model: Model<C1ConfiguratorParamData, GradientAscentParameterDTO<C1ParamSpaceDefinition>, C1OptimiserData>, parameters: GradientAscentParameterDTO<C1ParamSpaceDefinition>) {
         super(C1GradientAscentOptimiserName, model, parameters);
+    }
+
+    step(state: OptimiserStateDTO<C1OptimiserData>): OptimiserStateDTO<C1OptimiserData> {
+        return {} as OptimiserStateDTO<C1OptimiserData>;
     }
 
     getRandomInit(matrixInit: {
