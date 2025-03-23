@@ -74,17 +74,39 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         }
     }
 
-    getStateRequiredSimConfigs(
+    getStateRequiredConfiguratorParams(
         state: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>
-    ): C1ConfiguratorParamData[] {
-        const simConfigs = [] as C1ConfiguratorParamData[];
+    ): { multipleOrgConfigs: boolean; configuratorParamData: C1ConfiguratorParamData }[] {
+        const configParams = [] as { multipleOrgConfigs: boolean; configuratorParamData: C1ConfiguratorParamData }[];
         if (state && state.optimiserData && state.optimiserData.gradient) {
             for (let partialDerivative of state.optimiserData.gradient) {
-                simConfigs.push(partialDerivative.configuratorParams);
+                let multipleOrgConfigs: boolean = false;
+                if (
+                    partialDerivative.configuratorParams.matrixInit.incentive === "random" ||
+                    partialDerivative.configuratorParams.matrixInit.judgment === "random" ||
+                    partialDerivative.configuratorParams.matrixInit.influence === "random"
+                ) {
+                    multipleOrgConfigs = true;
+                }
+                configParams.push({
+                    multipleOrgConfigs: multipleOrgConfigs,
+                    configuratorParamData: partialDerivative.configuratorParams
+                });
             }
         }
-        simConfigs.push(state.optimiserData.x);
-        return simConfigs;
+        let multipleOrgConfigs: boolean = false;
+        if (
+            state.optimiserData.x.matrixInit.incentive === "random" ||
+            state.optimiserData.x.matrixInit.judgment === "random" ||
+            state.optimiserData.x.matrixInit.influence === "random"
+        ) {
+            multipleOrgConfigs = true;
+        }
+        configParams.push({
+            multipleOrgConfigs: multipleOrgConfigs,
+            configuratorParamData: state.optimiserData.x
+        });
+        return configParams;
     }
 
     private _getRandomInit(matrixInit: {

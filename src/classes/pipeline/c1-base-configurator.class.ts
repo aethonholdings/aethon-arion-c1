@@ -190,6 +190,7 @@ export class C1BaseConfigurator extends Configurator<
         return {
             modelName: C1ModelName,
             configuratorName: c1BaseConfiguratorName,
+            multipleOrgConfigs: true,
             data: c1BaseConfiguratorDefaultData
         };
     }
