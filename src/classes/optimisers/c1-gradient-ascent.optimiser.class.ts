@@ -13,7 +13,8 @@ import {
     OptimiserStateDTO,
     States,
     GradientAscentOptimiserStateData,
-    ObjectHash
+    ObjectHash,
+    ConvergenceTestDTO
 } from "aethon-arion-pipeline";
 import { C1ConfiguratorInitType } from "../../types/c1.types";
 
@@ -38,40 +39,95 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         super(C1GradientAscentOptimiserName, model, parameters);
     }
 
+    initialise(): OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> {
+        if (this._parameters) {
+            this._checkBounds();
+            return this._step(true);
+        } else {
+            throw this._initError();
+        }
+    }
+
+    update(
+        state: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>,
+        results: ConvergenceTestDTO[]
+    ): OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> {
+        // get all the inputs required for the calculation
+        const requiredInputs = this.getStateRequiredConfiguratorParams(state).map(
+            (input) => input.configuratorParamData
+        );
+
+        // calculate all the partial derivatives
+        let completed: number = 0;
+        for (let requiredInput of requiredInputs) {
+            // first check if a result exists for the required input
+            const result = results.find((convergenceTest) => {
+                return new ObjectHash(requiredInput).toString() === convergenceTest.configuratorParams.hash;
+            });
+            if (!result) {
+                throw new Error(
+                    `The required convergence output for config params ${JSON.stringify(requiredInput)} is missing`
+                );
+            }
+            // ensure that the result is completed and converged
+            if (result.state !== States.COMPLETED || !result.converged) {
+                throw new Error(
+                    `The required convergence output for config params ${JSON.stringify(requiredInput)} is not completed or converged`
+                );
+            }
+            // convergence test has completed
+            completed++;
+
+            // assess whether the required input is for the x or the gradient
+            if (state.optimiserData.x.hash === requiredInput.hash) {
+                // update x
+                state.optimiserData.x.performance = result.avgPerformance;
+            } else {
+                // update the partial derivative
+                const partialDerivative = state.optimiserData.gradient.find((partialDerivative) => {
+                    console.log(partialDerivative);
+                    return new ObjectHash(partialDerivative.configuratorParams).toString() ===
+                        new ObjectHash(requiredInput).toString();
+                });
+                if (!partialDerivative) {
+                    throw new Error(
+                        `The required partial derivative for config params ${JSON.stringify(requiredInput)} is missing`
+                    );
+                }
+
+                // update the partial derivative with the performance
+                partialDerivative.performance = result.avgPerformance;
+
+                // update the performance delta
+                partialDerivative.performanceDelta = result.avgPerformance - state.optimiserData.x.performance;
+
+                // update the slope
+                partialDerivative.xDelta === 0
+                    ? (partialDerivative.slope = null)
+                    : (partialDerivative.slope = partialDerivative.performanceDelta / partialDerivative.xDelta);
+
+                // update the status
+                partialDerivative.status = States.COMPLETED;
+            }
+        }
+
+        // if all gradient elements and x have been updated, then the optimisation step is complete
+        if (completed === state.optimiserData.gradient.length + 1) {
+            state.status = States.COMPLETED;
+            state.converged = this._testConvergence(state.optimiserData.gradient);
+            state.percentComplete = 1;
+        }
+
+        return state;
+    }
+
     step(
-        state?: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>
+        state: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>
     ): OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> {
         if (state && state.optimiserData && state.optimiserData.gradient) {
-            // check that all partial derivatives have been calculated
-            // otherwise throw an error
-            for (let partialDerivative of state.optimiserData.gradient) {
-                if (partialDerivative.status !== States.COMPLETED)
-                    throw new Error("The partial derivatives have not been calculated");
-            }
-            // all partial derivatives have been calculated, therefore we can proceed
-            // calculate the next point and establish the partial derivative dxs
-
-            return {} as OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>;
-        } else {
-            const tmp: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> =
-                {} as OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>;
-
-            tmp.modelName = this.model.name;
-            tmp.optimiserName = this.name;
-            tmp.status = States.PENDING;
-            // first pick a random configuration within the configuration parameter space
-            const x: C1ConfiguratorParamData = this._getRandomInit({
-                influence: "purposeful",
-                judgment: "random",
-                incentive: "purposeful"
-            });
-            tmp.optimiserData = {
-                x: x,
-                hash: new ObjectHash(x).toString(),
-                gradient: this._getGradient(x)
-            } as GradientAscentOptimiserStateData<C1ConfiguratorParamData>;
-            return tmp;
+            return this._step(false, state);
         }
+        throw new Error("An error occurred while stepping through the optimiser");
     }
 
     getStateRequiredConfiguratorParams(
@@ -107,6 +163,116 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             configuratorParamData: state.optimiserData.x
         });
         return configParams;
+    }
+
+    private _step(
+        init: boolean,
+        state?: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>
+    ): OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> {
+        const tmp: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> =
+            {} as OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>;
+
+        tmp.modelName = this.model.name;
+        tmp.optimiserName = this.name;
+        tmp.status = States.PENDING;
+        // first pick a random configuration within the configuration parameter space
+        let x: C1ConfiguratorParamData = {} as C1ConfiguratorParamData;
+        if (init)
+            x = this._getRandomInit({
+                influence: "purposeful",
+                judgment: "random",
+                incentive: "purposeful"
+            });
+        x.hash = new ObjectHash(x).toString();
+        if (!init && state) {
+            x = state.optimiserData.x;
+
+            let partialDerivative: GradientAscentPartialDerivativeDTO<C1ConfiguratorParamData> | undefined;
+
+            // update the spans
+            partialDerivative = state.optimiserData.gradient.find(
+                (partialDerivative) => partialDerivative.configuratorParameterValueName === "spans"
+            );
+            if (partialDerivative?.slope)
+                x.spans = this._boundStep(
+                    state.optimiserData.x.spans,
+                    partialDerivative.slope,
+                    this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MAX],
+                    true
+                );
+
+            // update the layers
+            partialDerivative = state.optimiserData.gradient.find(
+                (partialDerivative) => partialDerivative.configuratorParameterValueName === "layers"
+            );
+            if (partialDerivative?.slope)
+                x.layers = this._boundStep(
+                    state.optimiserData.x.layers,
+                    partialDerivative.slope,
+                    this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MAX],
+                    true
+                );
+
+            // update the action state probability
+            partialDerivative = state.optimiserData.gradient.find(
+                (partialDerivative) => partialDerivative.configuratorParameterValueName === "actionStateProbability"
+            );
+            if (partialDerivative?.slope)
+                x.actionStateProbability = this._boundStep(
+                    state.optimiserData.x.actionStateProbability,
+                    partialDerivative.slope,
+                    this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX]
+                );
+
+            // update the influence gain
+            partialDerivative = state.optimiserData.gradient.find(
+                (partialDerivative) => partialDerivative.configuratorParameterValueName === "gains.influence"
+            );
+            if (partialDerivative?.slope)
+                x.gains.influence = this._boundStep(
+                    state.optimiserData.x.gains.influence,
+                    partialDerivative.slope,
+                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MAX]
+                );
+
+            // update the judgment gain
+            partialDerivative = state.optimiserData.gradient.find(
+                (partialDerivative) => partialDerivative.configuratorParameterValueName === "gains.judgment"
+            );
+            if (partialDerivative?.slope)
+                x.gains.judgment = this._boundStep(
+                    state.optimiserData.x.gains.judgment,
+                    partialDerivative.slope,
+                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX]
+                );
+
+            // update the incentive gain
+            partialDerivative = state.optimiserData.gradient.find(
+                (partialDerivative) => partialDerivative.configuratorParameterValueName === "gains.incentive"
+            );
+            if (partialDerivative?.slope)
+                x.gains.incentive = this._boundStep(
+                    state.optimiserData.x.gains.incentive,
+                    partialDerivative.slope,
+                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN],
+                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX]
+                );
+
+            // update the graph
+        }
+        tmp.converged = false;
+        tmp.percentComplete = 0;
+        tmp.stepCount = state?.stepCount ? state.stepCount + 1 : 0;
+        tmp.optimiserData = {
+            x: x,
+            gradient: this._getGradient(x)
+        } as GradientAscentOptimiserStateData<C1ConfiguratorParamData>;
+        return tmp;
     }
 
     private _getRandomInit(matrixInit: {
@@ -155,6 +321,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 judgment: matrixInit.judgment,
                 incentive: matrixInit.incentive
             };
+            randomInit.hash = new ObjectHash(randomInit).toString();
             return randomInit;
         } else {
             throw this._initError();
@@ -241,15 +408,8 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         }
     }
 
-    private _getNextPoint(
-        configuratorParamData: C1ConfiguratorParamData,
-        gradient: Gradient<C1ConfiguratorParamData>
-    ): C1ConfiguratorParamData {
-        return {} as C1ConfiguratorParamData;
-    }
-
     private _testConvergence(gradient: Gradient<C1ConfiguratorParamData>): boolean {
-        return true;
+        return false;
     }
 
     protected _initPartialDerivative(
@@ -290,12 +450,19 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 dx.configuratorParams[valueName] = dx.configuratorParameterValue;
                 break;
         }
-        dx.hash = new ObjectHash(dx.configuratorParams).toString();
         return dx;
     }
 
     protected _boundRandom(min: number, max: number): number {
         return Math.random() * (max - min) + min;
+    }
+
+    protected _boundStep(x: number, slope: number, min: number, max: number, round?: boolean): number {
+        let value: number = x + slope * this._parameters.learningRate;
+        if (round) value = Math.round(value);
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
     }
 
     protected _validateConfiguratorParamData(configuratorParamData: C1ConfiguratorParamData): void {
