@@ -1,105 +1,104 @@
-import { C1GradientAscentOptimiserName } from "../../constants/c1.model.constants";
-import {
-    C1ConfiguratorParamData,
-    C1OptimiserDerivativeStepSize,
-    C1ParamSpaceDefinition
-} from "../../interfaces/c1.interfaces";
+import { Domain } from "domain";
+import { C1GradientAscentOptimiserName, C1MatrixInitTypes } from "../../constants/c1.model.constants";
+import { C1ConfiguratorParamData } from "../../interfaces/c1.interfaces";
 import {
     GradientAscentOptimiser,
     Model,
-    Gradient,
-    GradientAscentPartialDerivativeDTO,
-    GradientAscentParameterDTO,
     OptimiserStateDTO,
     States,
-    GradientAscentOptimiserStateData,
     ObjectHash,
-    ConvergenceTestDTO
+    ConvergenceTestDTO,
+    GradientAscentOptimiserData,
+    DataPoint,
+    GradientAscentOutput,
+    ConfiguratorParamsDTO,
+    GradientAscentParameters,
+    SimSetDTO,
+    DomainTypes
 } from "aethon-arion-pipeline";
-import { C1ConfiguratorInitType } from "../../types/c1.types";
+
+const flatten = require("flat");
 
 export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     C1ConfiguratorParamData,
-    GradientAscentParameterDTO<C1ParamSpaceDefinition, C1OptimiserDerivativeStepSize>,
-    GradientAscentOptimiserStateData<C1ConfiguratorParamData>
+    GradientAscentParameters,
+    GradientAscentOptimiserData<C1ConfiguratorParamData>
 > {
-    private graphMappings = {
-        teams: 0,
-        "top-down": 1
-    };
+    private _configuratorName: string;
 
     constructor(
         model: Model<
             C1ConfiguratorParamData,
-            GradientAscentParameterDTO<C1ParamSpaceDefinition, C1OptimiserDerivativeStepSize>,
-            GradientAscentOptimiserStateData<C1ConfiguratorParamData>
+            GradientAscentParameters,
+            GradientAscentOptimiserData<C1ConfiguratorParamData>
         >,
-        parameters: GradientAscentParameterDTO<C1ParamSpaceDefinition, C1OptimiserDerivativeStepSize>
+        parameters: GradientAscentParameters
     ) {
         super(C1GradientAscentOptimiserName, model, parameters);
+        this._configuratorName = this._model.getDefaultConfigurator().name;
+
+        // testing code
+        const step = this.step(undefined, undefined, {} as SimSetDTO);
+        console.log(step)
     }
 
-    initialise(): OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> {
-        if (this._parameters) {
-            this._checkBounds();
-            return this._step(true);
-        } else {
-            throw this._initError();
-        }
+    initialise(): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
+        if (this._parameters) return this._step(true);
+        else throw this._initError();
     }
 
     update(
-        state: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>,
+        state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
         results: ConvergenceTestDTO[]
-    ): OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> {
+    ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
         // get all the inputs required for the calculation
-        const requiredInputs = this.getStateRequiredConfiguratorParams(state).map(
-            (input) => input.configuratorParamData
-        );
+        const requiredInputs = this.getStateRequiredConfiguratorParams(state).map((input) => input.data);
 
         // calculate all the partial derivatives
         let completed: number = 0;
         for (let requiredInput of requiredInputs) {
             // first check if a result exists for the required input
+            const hash = requiredInput.hash;
             const result = results.find((convergenceTest) => {
-                return new ObjectHash(requiredInput).toString() === convergenceTest.configuratorParams.hash;
+                return hash == convergenceTest.configuratorParams.hash;
             });
             if (!result) {
-                throw new Error(
-                    `The required convergence output for config params ${JSON.stringify(requiredInput)} is missing`
-                );
+                throw new Error(`The required convergence output for config params hash ${hash} is missing`);
             }
             // ensure that the result is completed and converged
             if (result.state !== States.COMPLETED || !result.converged) {
                 throw new Error(
-                    `The required convergence output for config params ${JSON.stringify(requiredInput)} is not completed or converged`
+                    `The required convergence output for config params hash ${hash} is not completed or converged`
                 );
             }
             // convergence test has completed
             completed++;
-
             // assess whether the required input is for the x or the gradient
-            if (state.optimiserData.x.hash === requiredInput.hash) {
+            if (state.optimiserData.x.hash == hash) {
                 // update x
-                state.optimiserData.x.performance = result.avgPerformance;
+                state.optimiserData.x.configuratorParamData.performance = result.avgPerformance;
             } else {
                 // update the partial derivative
-                const partialDerivative = state.optimiserData.gradient.find((partialDerivative) => {
-                    console.log(partialDerivative);
-                    return new ObjectHash(partialDerivative.configuratorParams).toString() ===
-                        new ObjectHash(requiredInput).toString();
-                });
+                const partialDerivative = state.optimiserData.gradient.find(
+                    (
+                        partialDerivative: DataPoint<
+                            ConfiguratorParamsDTO<C1ConfiguratorParamData>,
+                            GradientAscentOutput
+                        >
+                    ) => {
+                        return partialDerivative.data.inputs.hash == hash;
+                    }
+                );
                 if (!partialDerivative) {
-                    throw new Error(
-                        `The required partial derivative for config params ${JSON.stringify(requiredInput)} is missing`
-                    );
+                    throw new Error(`The required partial derivative for config params hash ${hash} is missing`);
                 }
 
                 // update the partial derivative with the performance
                 partialDerivative.performance = result.avgPerformance;
 
                 // update the performance delta
-                partialDerivative.performanceDelta = result.avgPerformance - state.optimiserData.x.performance;
+                partialDerivative.performanceDelta =
+                    result.avgPerformance - state.optimiserData.x.configuratorParamData.performance;
 
                 // update the slope
                 partialDerivative.xDelta === 0
@@ -117,340 +116,154 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             state.converged = this._testConvergence(state.optimiserData.gradient);
             state.percentComplete = 1;
         }
-
         return state;
     }
 
     step(
-        state: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>
-    ): OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> {
-        if (state && state.optimiserData && state.optimiserData.gradient) {
-            return this._step(false, state);
+        stateDTO?: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
+        resultsDTO?: ConvergenceTestDTO[],
+        simSetDTO?: SimSetDTO
+    ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
+        if (stateDTO && resultsDTO) {
+            return this._step(false, stateDTO, resultsDTO);
+        } else if (simSetDTO) {
+            return this._step(true, undefined, undefined, simSetDTO);
+        } else {
+            throw new Error("Invalid parameters for step; either provide a state and results or a simSet");
         }
-        throw new Error("An error occurred while stepping through the optimiser");
     }
 
+    // get the required configurator parameters for the current state; will returned array of structured objects
+    // holding the ConfiguratorParameterData that will be required for all simulations the results of which will be
+    // needed as inputs to asses the gradient and x values for the optimiser
     getStateRequiredConfiguratorParams(
-        state: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>
-    ): { multipleOrgConfigs: boolean; configuratorParamData: C1ConfiguratorParamData }[] {
-        const configParams = [] as { multipleOrgConfigs: boolean; configuratorParamData: C1ConfiguratorParamData }[];
-        if (state && state.optimiserData && state.optimiserData.gradient) {
-            for (let partialDerivative of state.optimiserData.gradient) {
-                let multipleOrgConfigs: boolean = false;
-                if (
-                    partialDerivative.configuratorParams.matrixInit.incentive === "random" ||
-                    partialDerivative.configuratorParams.matrixInit.judgment === "random" ||
-                    partialDerivative.configuratorParams.matrixInit.influence === "random"
-                ) {
-                    multipleOrgConfigs = true;
-                }
-                configParams.push({
-                    multipleOrgConfigs: multipleOrgConfigs,
-                    configuratorParamData: partialDerivative.configuratorParams
-                });
-            }
-        }
-        let multipleOrgConfigs: boolean = false;
-        if (
-            state.optimiserData.x.matrixInit.incentive === "random" ||
-            state.optimiserData.x.matrixInit.judgment === "random" ||
-            state.optimiserData.x.matrixInit.influence === "random"
-        ) {
-            multipleOrgConfigs = true;
-        }
-        configParams.push({
-            multipleOrgConfigs: multipleOrgConfigs,
-            configuratorParamData: state.optimiserData.x
-        });
-        return configParams;
+        state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>
+    ): ConfiguratorParamsDTO<C1ConfiguratorParamData>[] {
+        return state.optimiserData.dataPoints.map((dataPoint) => dataPoint.data.inputs);
     }
 
     private _step(
         init: boolean,
-        state?: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>
-    ): OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> {
-        const tmp: OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>> =
-            {} as OptimiserStateDTO<GradientAscentOptimiserStateData<C1ConfiguratorParamData>>;
+        state?: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
+        results?: ConvergenceTestDTO[],
+        simSetDTO?: SimSetDTO
+    ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
+        const newState: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> = {
+            modelName: this.model.name,
+            optimiserName: this.name,
+            converged: false,
+            percentComplete: 0,
+            status: States.PENDING,
+            optimiserData: {}
+        } as OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>;
 
-        tmp.modelName = this.model.name;
-        tmp.optimiserName = this.name;
-        tmp.status = States.PENDING;
-        // first pick a random configuration within the configuration parameter space
-        let x: C1ConfiguratorParamData = {} as C1ConfiguratorParamData;
-        if (init)
-            x = this._getRandomInit({
-                influence: "purposeful",
-                judgment: "random",
-                incentive: "purposeful"
-            });
-        x.hash = new ObjectHash(x).toString();
-        if (!init && state) {
-            x = state.optimiserData.x;
+        // set the optimiser data
+        newState.optimiserData.dataPoints = [];
 
-            let partialDerivative: GradientAscentPartialDerivativeDTO<C1ConfiguratorParamData> | undefined;
-
-            // update the spans
-            partialDerivative = state.optimiserData.gradient.find(
-                (partialDerivative) => partialDerivative.configuratorParameterValueName === "spans"
-            );
-            if (partialDerivative?.slope)
-                x.spans = this._boundStep(
-                    state.optimiserData.x.spans,
-                    partialDerivative.slope,
-                    this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MAX],
-                    true
-                );
-
-            // update the layers
-            partialDerivative = state.optimiserData.gradient.find(
-                (partialDerivative) => partialDerivative.configuratorParameterValueName === "layers"
-            );
-            if (partialDerivative?.slope)
-                x.layers = this._boundStep(
-                    state.optimiserData.x.layers,
-                    partialDerivative.slope,
-                    this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MAX],
-                    true
-                );
-
-            // update the action state probability
-            partialDerivative = state.optimiserData.gradient.find(
-                (partialDerivative) => partialDerivative.configuratorParameterValueName === "actionStateProbability"
-            );
-            if (partialDerivative?.slope)
-                x.actionStateProbability = this._boundStep(
-                    state.optimiserData.x.actionStateProbability,
-                    partialDerivative.slope,
-                    this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX]
-                );
-
-            // update the influence gain
-            partialDerivative = state.optimiserData.gradient.find(
-                (partialDerivative) => partialDerivative.configuratorParameterValueName === "gains.influence"
-            );
-            if (partialDerivative?.slope)
-                x.gains.influence = this._boundStep(
-                    state.optimiserData.x.gains.influence,
-                    partialDerivative.slope,
-                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MAX]
-                );
-
-            // update the judgment gain
-            partialDerivative = state.optimiserData.gradient.find(
-                (partialDerivative) => partialDerivative.configuratorParameterValueName === "gains.judgment"
-            );
-            if (partialDerivative?.slope)
-                x.gains.judgment = this._boundStep(
-                    state.optimiserData.x.gains.judgment,
-                    partialDerivative.slope,
-                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX]
-                );
-
-            // update the incentive gain
-            partialDerivative = state.optimiserData.gradient.find(
-                (partialDerivative) => partialDerivative.configuratorParameterValueName === "gains.incentive"
-            );
-            if (partialDerivative?.slope)
-                x.gains.incentive = this._boundStep(
-                    state.optimiserData.x.gains.incentive,
-                    partialDerivative.slope,
-                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX]
-                );
-
-            // update the graph
+        // check if this is an initialisation step
+        if (init && simSetDTO) {
+            newState.stepCount = 0;
+            newState.simSet = simSetDTO;
+            // it is, pick a random configuration within the configuration parameter space as the
+            // initial x data point
+            newState.optimiserData.dataPoints.push(this._getNewDataPoint("x", this._getRandomInit()));
         }
-        tmp.converged = false;
-        tmp.percentComplete = 0;
-        tmp.stepCount = state?.stepCount ? state.stepCount + 1 : 0;
-        tmp.optimiserData = {
-            x: x,
-            gradient: this._getGradient(x)
-        } as GradientAscentOptimiserStateData<C1ConfiguratorParamData>;
-        return tmp;
+        if (!init && state && results) {
+            // we are stepping out of an existing state
+            newState.stepCount = state.stepCount + 1;
+            newState.simSet = state.simSet;
+            // copy the current x data point on which the new point will be based
+            let xPrev: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput> | undefined =
+                state.optimiserData.dataPoints.find((dataPoint) => dataPoint.id === "x");
+            if (xPrev) {
+                for (let dataPoint of state.optimiserData.dataPoints) {
+                    if (dataPoint.id !== "x") {
+                        // STEP THE DATA POINT USING this._boundStep
+                    }
+                }
+            } else {
+                throw new Error("Could not find data point for x");
+            }
+        }
+
+        // finally, generate the gradient data points
+        newState.optimiserData.dataPoints = [
+            ...newState.optimiserData.dataPoints,
+            ...this._getGradient(newState.optimiserData.dataPoints[0])
+        ];
+        return newState;
     }
 
-    private _getRandomInit(matrixInit: {
-        influence: C1ConfiguratorInitType;
-        judgment: C1ConfiguratorInitType;
-        incentive: C1ConfiguratorInitType;
-    }): C1ConfiguratorParamData {
-        if (this._parameters && this._parameters.parameterSpaceDefinition) {
-            // return a random point in the parameter space
-            const randomInit = {} as C1ConfiguratorParamData;
-            randomInit.spans = Math.floor(
-                this._boundRandom(
-                    this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MAX]
-                )
-            );
-            randomInit.layers = Math.floor(
-                this._boundRandom(
-                    this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MAX]
-                )
-            );
-            randomInit.gains = {
-                influence: this._boundRandom(
-                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MAX]
-                ),
-                judgment: this._boundRandom(
-                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX]
-                ),
-                incentive: this._boundRandom(
-                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN],
-                    this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX]
-                )
-            };
-            randomInit.actionStateProbability = this._boundRandom(
-                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN],
-                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX]
-            );
-            Math.random() > 0.5 ? (randomInit.graph = "top-down") : (randomInit.graph = "teams");
-            randomInit.board = { controlStep: false };
-            randomInit.reporting = { unitPayroll: 1, unitPrice: 1 };
-            randomInit.matrixInit = {
-                influence: matrixInit.influence,
-                judgment: matrixInit.judgment,
-                incentive: matrixInit.incentive
-            };
-            randomInit.hash = new ObjectHash(randomInit).toString();
-            return randomInit;
-        } else {
-            throw this._initError();
-        }
-    }
-
-    private _getGradient(configuratorParamData: C1ConfiguratorParamData): Gradient<C1ConfiguratorParamData> {
+    private _getGradient(
+        x: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>
+    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[] {
         if (this._parameters) {
-            this._validateConfiguratorParamData(configuratorParamData);
+            // this._validateConfiguratorParamData(x.data.inputs.data);
             // calculate the partial derivative along each optimisation dimension
-            let del = [] as Gradient<C1ConfiguratorParamData>;
+            let del = [] as DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[];
+            const xConfigParams: C1ConfiguratorParamData = x.data.inputs.data;
+            for (let key in this._parameterDomains) {
+                const domain = this._parameterDomains[key];
+                if (domain.optimise) {
+                    // create a flat copy of the x configuration parameters
+                    let copyOfXConfigFlat = flatten(JSON.parse(JSON.stringify(xConfigParams)));
+                    // get the value of the parameter to be optimised
+                    let xConfiguratorCurrentValue = copyOfXConfigFlat[key];
+                    let xConfiguratorNewValue;
+                    let xDelta: number = 0;
+                    let xPlusXDelta: number = 0;
+                    let xPlusDxOutput: GradientAscentOutput = {} as GradientAscentOutput;
 
-            // dx(spans)
-            del.push(
-                this._initPartialDerivative(
-                    configuratorParamData,
-                    "spans",
-                    configuratorParamData.spans,
-                    1,
-                    this._parameters.parameterSpaceDefinition.spans
-                )
-            );
+                    // establish the xDelta and new value of x for the parameter to be optimised
+                    if (domain.type === DomainTypes.DISCRETE || domain.type === DomainTypes.CONTINUOUS) {
+                        xPlusXDelta = xConfiguratorCurrentValue;
+                        if (xConfiguratorCurrentValue < domain.max) {
+                            xDelta = Math.min(domain.derivativeStepSize, domain.max - xConfiguratorCurrentValue);
+                        } else {
+                            xDelta = -Math.min(domain.derivativeStepSize, xConfiguratorCurrentValue - domain.min);
+                        }
+                        xPlusXDelta += xDelta;
+                        xConfiguratorNewValue = xPlusXDelta;
+                    }
+                    if (domain.type === DomainTypes.BOOLEAN) {
+                        xDelta = xConfiguratorCurrentValue ? -1 : 1;
+                        xPlusXDelta += xDelta;
+                        xConfiguratorNewValue = xPlusXDelta ? true : false;
+                    }
+                    if (domain.type === DomainTypes.CATEGORICAL) {
+                        xPlusXDelta = domain.categories.indexOf(xConfiguratorCurrentValue);
+                        xDelta = xPlusXDelta + 1 < domain.categories.length ? 1 : -1;
+                        xConfiguratorNewValue =
+                            domain.categories[
+                                (xPlusXDelta + xDelta + domain.categories.length) % domain.categories.length
+                            ];
+                        xPlusXDelta += xDelta;
+                    }
+                    // using the calculated values of the new x and xDelta, create a new data point
+                    // that will be used to estimate the partial derivative along the optimisation dimension
+                    // of the parameter key
+                    copyOfXConfigFlat[key] = xPlusXDelta;
+                    let xPlusDxConfigParams = flatten.unflatten(copyOfXConfigFlat);
+                    xPlusDxOutput = {
+                        configuratorParameterValue: xConfiguratorNewValue,
+                        xPlusDelta: xPlusXDelta,
+                        xDelta: xDelta
+                    };
 
-            // dx(layers)
-            del.push(
-                this._initPartialDerivative(
-                    configuratorParamData,
-                    "layers",
-                    configuratorParamData.layers,
-                    1,
-                    this._parameters.parameterSpaceDefinition.layers
-                )
-            );
-
-            // dx(influence)
-            del.push(
-                this._initPartialDerivative(
-                    configuratorParamData,
-                    "gains.influence",
-                    configuratorParamData.gains.influence,
-                    this._parameters.derivativeStepSizes.gains.influence,
-                    this._parameters.parameterSpaceDefinition.gains.influence
-                )
-            );
-
-            // dx(judgment)
-            del.push(
-                this._initPartialDerivative(
-                    configuratorParamData,
-                    "gains.judgment",
-                    configuratorParamData.gains.judgment,
-                    this._parameters.derivativeStepSizes.gains.judgment,
-                    this._parameters.parameterSpaceDefinition.gains.judgment
-                )
-            );
-
-            // dx(incentive)
-            del.push(
-                this._initPartialDerivative(
-                    configuratorParamData,
-                    "gains.incentive",
-                    configuratorParamData.gains.incentive,
-                    this._parameters.derivativeStepSizes.gains.incentive,
-                    this._parameters.parameterSpaceDefinition.gains.incentive
-                )
-            );
-
-            // dx(actionStateProbability)
-            del.push(
-                this._initPartialDerivative(
-                    configuratorParamData,
-                    "actionStateProbability",
-                    configuratorParamData.actionStateProbability,
-                    this._parameters.derivativeStepSizes.actionStateProbability,
-                    this._parameters.parameterSpaceDefinition.actionStateProbability
-                )
-            );
-
-            // dx(graph)
-
+                    // addd the data point to the gradient estimation array
+                    del.push(this._getNewDataPoint(key, xPlusDxConfigParams, xPlusDxOutput));
+                }
+            }
             return del;
         } else {
             throw this._initError();
         }
     }
 
-    private _testConvergence(gradient: Gradient<C1ConfiguratorParamData>): boolean {
+    private _testConvergence(
+        gradient: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[]
+    ): boolean {
         return false;
-    }
-
-    protected _initPartialDerivative(
-        x: C1ConfiguratorParamData,
-        valueName: string,
-        initValue: any,
-        stepSize: number,
-        bounds: number[]
-    ): GradientAscentPartialDerivativeDTO<C1ConfiguratorParamData> {
-        const dx = {} as GradientAscentPartialDerivativeDTO<C1ConfiguratorParamData>;
-        dx.configuratorParameterValueName = valueName;
-        let tmp: number = 1;
-        if (valueName !== "graph") {
-            tmp = stepSize;
-            if (initValue + tmp > bounds[this._boundIndices.MAX]) tmp = 0;
-            dx.configuratorParameterValue = initValue + tmp;
-        }
-        dx.xDelta = tmp;
-        dx.xPlusDelta = initValue + tmp;
-        dx.status = States.PENDING;
-        dx.performance = null;
-        dx.performanceDelta = null;
-        dx.slope = null;
-
-        // create the configuratorParams for the dx point
-        dx.configuratorParams = JSON.parse(JSON.stringify(x));
-        switch (valueName) {
-            case "gains.influence":
-                dx.configuratorParams.gains.influence = dx.configuratorParameterValue;
-                break;
-            case "gains.judgment":
-                dx.configuratorParams.gains.judgment = dx.configuratorParameterValue;
-                break;
-            case "gains.incentive":
-                dx.configuratorParams.gains.incentive = dx.configuratorParameterValue;
-                break;
-            default:
-                dx.configuratorParams[valueName] = dx.configuratorParameterValue;
-                break;
-        }
-        return dx;
     }
 
     protected _boundRandom(min: number, max: number): number {
@@ -525,64 +338,61 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         return value >= min && value <= max;
     }
 
-    protected _checkBounds() {
-        if (this._parameters.parameterSpaceDefinition) {
-            if (
-                this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MAX] <
-                this._parameters.parameterSpaceDefinition.spans[this._boundIndices.MIN]
-            ) {
-                throw new Error("The maximum span must be greater than the minimum span");
-            }
-            if (
-                this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MAX] <
-                this._parameters.parameterSpaceDefinition.layers[this._boundIndices.MIN]
-            ) {
-                throw new Error("The maximum layer must be greater than the minimum layer");
-            }
-            if (
-                this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MAX] <
-                this._parameters.parameterSpaceDefinition.gains.influence[this._boundIndices.MIN]
-            ) {
-                throw new Error("The maximum influence gain must be greater than the minimum influence gain");
-            }
-            if (
-                this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MAX] <
-                this._parameters.parameterSpaceDefinition.gains.judgment[this._boundIndices.MIN]
-            ) {
-                throw new Error("The maximum judgment gain must be greater than the minimum judgment gain");
-            }
-            if (
-                this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MAX] <
-                this._parameters.parameterSpaceDefinition.gains.incentive[this._boundIndices.MIN]
-            ) {
-                throw new Error("The maximum incentive gain must be greater than the minimum incentive gain");
-            }
-            if (
-                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] <
-                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN]
-            ) {
-                throw new Error(
-                    "The maximum action state probability must be greater than the minimum action state probability"
-                );
-            }
-            if (
-                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] <= 0 ||
-                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MAX] >= 1
-            ) {
-                throw new Error("The maximum action state probability must be in the range [0,1]");
-            }
-            if (
-                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN] <= 0 ||
-                this._parameters.parameterSpaceDefinition.actionStateProbability[this._boundIndices.MIN] >= 1
-            ) {
-                throw new Error("The minimum action state probability must be in the range [0,1]");
-            }
-        } else {
-            throw this._initError();
-        }
+    protected _getNewDataPoint(
+        id: string,
+        configParams: C1ConfiguratorParamData,
+        outputs: GradientAscentOutput = {} as GradientAscentOutput
+    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput> {
+        return {
+            id: id,
+            data: {
+                inputs: {
+                    modelName: this._model.name,
+                    configuratorName: this._configuratorName,
+                    multipleOrgConfigs:
+                        configParams.matrixInit.incentive === C1MatrixInitTypes.RANDOM ||
+                        configParams.matrixInit.influence === C1MatrixInitTypes.RANDOM ||
+                        configParams.matrixInit.judgment === C1MatrixInitTypes.RANDOM ||
+                        configParams.matrixInit.judgment === C1MatrixInitTypes.HYBRID ||
+                        configParams.matrixInit.influence === C1MatrixInitTypes.HYBRID ||
+                        configParams.matrixInit.incentive === C1MatrixInitTypes.HYBRID,
+                    data: configParams,
+                    hash: new ObjectHash(configParams).toString()
+                },
+                outputs: outputs
+            },
+            status: States.PENDING
+        };
     }
 
-    protected _initError(): Error {
-        return new Error("The optimiser has not been initialised");
+    private _getRandomInit(): C1ConfiguratorParamData {
+        const randomInit: C1ConfiguratorParamData = {} as C1ConfiguratorParamData;
+        // return a random point in the parameter space
+
+        for (const key in this._parameterDomains) {
+            const domain = this._parameterDomains[key];
+            if (!domain.optimise) randomInit[key] = domain.default;
+            else {
+                switch (domain.type) {
+                    case DomainTypes.DISCRETE:
+                        randomInit[key] = Math.floor(Math.random() * (domain.max - domain.min + 1)) + domain.min;
+                        break;
+                    case DomainTypes.CONTINUOUS:
+                        randomInit[key] = this._boundRandom(domain.min, domain.max);
+                        break;
+                    case DomainTypes.BOOLEAN:
+                        randomInit[key] = Math.random() < 0.5;
+                        break;
+                    case DomainTypes.CATEGORICAL:
+                        if (domain.categories) {
+                            randomInit[key] = domain.categories[Math.floor(Math.random() * domain.categories.length)];
+                        } else {
+                            throw new Error(`The parameter ${key} is categorical but has no categories defined`);
+                        }
+                        break;
+                }
+            }
+        }
+        return flatten.unflatten(randomInit);
     }
 }

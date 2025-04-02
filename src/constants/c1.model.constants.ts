@@ -1,11 +1,20 @@
-import { GradientAscentParameterDTO, ModelIndexDTO, OptimiserData } from "aethon-arion-pipeline";
+import { DomainTypes, GradientAscentParameters, ModelIndexDTO } from "aethon-arion-pipeline";
 import { C1Model } from "../classes/pipeline/c1-model.class";
-import { C1OptimiserDerivativeStepSize, C1ParamSpaceDefinition } from "../interfaces/c1.interfaces";
 
 // BASE CONSTANTS --------------------------------
 export const C1ModelName: string = "C1";
 export const C1ModelClockTickSeconds: number = 300;
 export const C1GradientAscentOptimiserName = "C1 Gradient Ascent Optimiser";
+export enum C1MatrixInitTypes {
+    RANDOM = "random",
+    PURPOSEFUL = "purposeful",
+    HYBRID = "hybrid",
+    NULL = "null"
+}
+export enum C1GraphTypes {
+    TOP_DOWN = "top-down",
+    TEAMS = "teams"
+}
 
 // AGENT SET -------------------------------------
 export enum C1AgentStateIndex {
@@ -117,35 +126,116 @@ export enum KPIFactoryIndex {
 }
 
 // GRADIENT ASCENT  ---------------------------------
-export const C1GradientAscentParameterDTO: GradientAscentParameterDTO<C1ParamSpaceDefinition, C1OptimiserDerivativeStepSize> = {
-    learningRate: 0.01,
-    tolerance: 0.0001,
-    parameterSpaceDefinition: {
-        spans: [1, 8],
-        layers: [1, 6],
-        gains: {
-            influence: [0, 1],
-            judgment: [0, 1],
-            incentive: [0, 0.0001]
-        },
-        graph: ["top-down", "teams"],
-        actionStateProbability: [0.85, 0.85],
-        matrixInit: {
-            influence: ["purposeful"],
-            judgment: ["random"],
-            incentive: ["purposeful"]
-        },
-        board: [false]
+export const C1GradientAscentParameterDTO: GradientAscentParameters = {
+    iterations: {
+        learningRate: 0.01,
+        tolerance: 0.0001,
+        max: 1000
     },
-    derivativeStepSizes: {
-        gains: {
-            influence: 0.002,
-            judgment: 0.002,
-            incentive: 0.000001
+    parameterSpace: [
+        { id: "spans", domain: { type: DomainTypes.DISCRETE, optimise: true, min: 1, max: 8, derivativeStepSize: 1 } },
+        { id: "layers", domain: { type: DomainTypes.DISCRETE, optimise: true, min: 1, max: 6, derivativeStepSize: 1 } },
+        {
+            id: "gains.influence",
+            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.1,derivativeStepSize: 0.01 }
+            
         },
-        actionStateProbability: 0.01,
-    }
+        {
+            id: "gains.judgment",
+            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.1,derivativeStepSize: 0.01 }
+            
+        },
+        {
+            id: "gains.incentive",
+            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.0001,derivativeStepSize: 0.00001 },
+            
+        },
+        {
+            id: "actionStateProbability",
+            domain: { type: DomainTypes.CONTINUOUS, optimise: false, default: 0.85 }
+        },
+        {
+            id: "graph",
+            domain: {
+                type: DomainTypes.CATEGORICAL,
+                optimise: false,
+                default: C1GraphTypes.TOP_DOWN,
+                categories: [C1GraphTypes.TOP_DOWN, C1GraphTypes.TEAMS]
+            }
+        },
+        {
+            id: "matrixInit.influence",
+            domain: {
+                type: DomainTypes.CATEGORICAL,
+                optimise: false,
+                default: C1MatrixInitTypes.PURPOSEFUL,
+                categories: [
+                    C1MatrixInitTypes.NULL,
+                    C1MatrixInitTypes.RANDOM,
+                    C1MatrixInitTypes.PURPOSEFUL,
+                    C1MatrixInitTypes.HYBRID
+                ]
+            }
+        },
+        {
+            id: "matrixInit.judgment",
+            domain: {
+                type: DomainTypes.CATEGORICAL,
+                optimise: false,
+                default: C1MatrixInitTypes.RANDOM,
+                categories: [
+                    C1MatrixInitTypes.NULL,
+                    C1MatrixInitTypes.RANDOM,
+                    C1MatrixInitTypes.PURPOSEFUL,
+                    C1MatrixInitTypes.HYBRID
+                ]
+            }
+        },
+        {
+            id: "matrixInit.incentive",
+            domain: {
+                type: DomainTypes.CATEGORICAL,
+                optimise: false,
+                default: C1MatrixInitTypes.PURPOSEFUL,
+                categories: [
+                    C1MatrixInitTypes.NULL,
+                    C1MatrixInitTypes.RANDOM,
+                    C1MatrixInitTypes.PURPOSEFUL,
+                    C1MatrixInitTypes.HYBRID
+                ]
+            }
+        },
+        {
+            id: "board.controlStep",
+            domain: { type: DomainTypes.BOOLEAN, optimise: false, default: false }
+        },
+        {
+            id: "reporting.unitPayroll",
+            domain: { type: DomainTypes.CONTINUOUS, optimise: false, default: 1 }
+        },
+        {
+            id: "reporting.unitPrice",
+            domain: { type: DomainTypes.CONTINUOUS, optimise: false, default: 1 }
+        }
+    ]
 };
 
 // The C1 model
 export const C1: C1Model = new C1Model();
+
+// spans: number; // org chart spans
+// layers: number; // org chart layers
+// gains: {
+//     influence: number; // gain applied to initialised tensor kernel in [0,1] range
+//     judgment: number; // gain applied to initialised tensor kernel in [0,1] range
+//     incentive: number; // gain applied to initialised tensor kernel in [0,1] range
+// }
+// graph: C1GraphType; // top-down is a typical tree org | teams is an org where each team is interconnected in an influence lattive
+// actionStateProbability: number; // default is 85% (0.85) based on Johnson (1986)
+// matrixInit: {
+//     influence: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
+//     judgment: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
+//     incentive: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
+// }
+// board: C1BoardConfig; // defines whether the Board will change the targets halfway through the simulation to zero to test controllability
+// reporting: C1ReportingConfig;
