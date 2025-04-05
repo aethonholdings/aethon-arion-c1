@@ -70,28 +70,50 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 const result = results.find(
                     (result) => result.configuratorParams.hash === requiredDataPoint.data.inputs.hash
                 );
+                const domain = this._parameterDomains[requiredDataPoint.id];
                 if (!result) found = false;
                 else {
+                    if (requiredDataPoint.id === "x") state.performance = result.avgPerformance;
                     if (result.state !== States.COMPLETED) completed = false;
                     if (result.state === States.RUNNING) running = true;
                     if (result.state === States.FAILED) failed = true;
                     if (result.state === States.COMPLETED || result.state === States.RUNNING) {
                         requiredDataPoint.status = result.state;
+                        let prevPerformance = requiredDataPoint.data.outputs.performance
+                            ? requiredDataPoint.data.outputs.performance
+                            : result.avgPerformance;
                         requiredDataPoint.data.outputs.performance = result.avgPerformance;
-                        if (xResult && requiredDataPoint.data.outputs.xDelta) {
-                            requiredDataPoint.data.outputs.performanceDelta =
-                                result.avgPerformance - xResult.avgPerformance;
-                            requiredDataPoint.data.outputs.slope =
-                                requiredDataPoint.data.outputs.performanceDelta / requiredDataPoint.data.outputs.xDelta;
+                        if (
+                            prevPerformance &&
+                            requiredDataPoint.data.outputs.performance &&
+                            requiredDataPoint.data.outputs.performance > prevPerformance &&
+                            this._parameterDomains[requiredDataPoint.id] &&
+                            (this._parameterDomains[requiredDataPoint.id].type === DomainTypes.CATEGORICAL ||
+                                this._parameterDomains[requiredDataPoint.id].type === DomainTypes.BOOLEAN)
+                        ) {
+                            requiredDataPoint.data.outputs.configuratorParameterValue = flatten(
+                                result.configuratorParams.data
+                            )[requiredDataPoint.id];
+                        }
+                        if (xResult) {
+                            if (requiredDataPoint.id !== "x") {
+                                requiredDataPoint.data.outputs.performanceDelta =
+                                    result.avgPerformance - xResult.avgPerformance;
+                                if (requiredDataPoint.data.outputs.xDelta) {
+                                    requiredDataPoint.data.outputs.slope =
+                                        requiredDataPoint.data.outputs.performanceDelta /
+                                        requiredDataPoint.data.outputs.xDelta;
+                                }
+                            }
                         }
                     }
                 }
             }
             if (!found) throw new Error("Not all results were received");
             if (completed) {
-                state.status = States.COMPLETED;
-                state.converged = this._testConvergence(state.optimiserData.dataPoints);
-                state.percentComplete = 100;
+                // state.status = States.COMPLETED;
+                // state.converged = this._testConvergence(state.optimiserData.dataPoints);
+                // state.percentComplete = 100;
             }
             if (running) {
                 state.status = States.RUNNING;
@@ -162,7 +184,9 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             let xPrev: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput> | undefined =
                 state.optimiserData.dataPoints.find((dataPoint) => dataPoint.id === "x");
             if (xPrev) {
+                // flatten the xConfig for the x piont for easy reference
                 let currentXConfigFlat = flatten(JSON.parse(JSON.stringify(xPrev.data.inputs.data)));
+                // copy the current x config to a new object to use for the new x
                 let newXConfigFlat = JSON.parse(JSON.stringify(currentXConfigFlat));
 
                 for (const key in this._parameterDomains) {
@@ -198,8 +222,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                                     if (
                                         maxPerformanceResult?.data?.outputs?.configuratorParameterValue &&
                                         maxPerformanceResult?.data?.outputs?.performance &&
-                                        maxPerformanceResult?.data?.outputs?.performance >
-                                            xPrev.data.outputs.performance
+                                        maxPerformanceResult.data.outputs.performance > xPrev.data.outputs.performance
                                     ) {
                                         newXConfigFlat[key] =
                                             maxPerformanceResult.data.outputs.configuratorParameterValue;
@@ -237,7 +260,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 let copyOfXConfigFlat = flatten(JSON.parse(JSON.stringify(xConfigParams)));
                 // get the value of the parameter to be optimised
                 let xConfiguratorCurrentValue = copyOfXConfigFlat[key];
-
+                let xPlusDxOutput: GradientAscentOutput = {} as GradientAscentOutput;
                 // establish the xDelta and new value of x for the parameter to be optimised
                 // first for the case of discrete, continuous and boolean domains
                 if (
@@ -248,7 +271,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     let xConfiguratorNewValue;
                     let xDelta: number = 0;
                     let xPlusXDelta: number = 0;
-                    let xPlusDxOutput: GradientAscentOutput = {} as GradientAscentOutput;
+                    
                     if (domain.type === DomainTypes.DISCRETE || domain.type === DomainTypes.CONTINUOUS) {
                         xPlusXDelta = xConfiguratorCurrentValue;
                         if (xConfiguratorCurrentValue < domain.max) {
@@ -290,7 +313,8 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                             // using the calculated values of the new x and xDelta, create a new data point
                             // that will be used to estimate the partial derivative along the optimisation dimension
                             // of the parameter key
-                            del.push(this._getNewDataPoint(key, xPlusDxConfigParams));
+                            xPlusDxOutput.configuratorParameterValue = xConfiguratorNewValue;
+                            del.push(this._getNewDataPoint(key, xPlusDxConfigParams, xPlusDxOutput));
                         }
                     }
                 }

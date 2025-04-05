@@ -4,15 +4,25 @@ import { C1Model } from "../classes/pipeline/c1-model.class";
 // BASE CONSTANTS --------------------------------
 export const C1ModelName: string = "C1";
 export const C1ModelClockTickSeconds: number = 300;
+
 export enum C1MatrixInitTypes {
     RANDOM = "random",
     PURPOSEFUL = "purposeful",
     HYBRID = "hybrid",
     NULL = "null"
 }
+
 export enum C1GraphTypes {
     TOP_DOWN = "top-down",
     TEAMS = "teams"
+}
+
+export enum C1OptimiserNames {
+    GRADIENT_ASCENT = "C1GradientAscentOptimiser"
+}
+
+export enum C1ConfiguratorNames {
+    BASE = "C1BaseConfigurator"
 }
 
 // AGENT SET -------------------------------------
@@ -128,8 +138,8 @@ export enum KPIFactoryIndex {
 export const C1GradientAscentOptimiserName = "C1GradientAscentOptimiser";
 export const C1GradientAscentParameterDTO: GradientAscentParameters = {
     iterations: {
-        learningRate: 0.01,
-        tolerance: 0.0001,
+        learningRate: 0.001,
+        tolerance: 0.001,
         max: 1000
     },
     parameterSpace: [
@@ -137,18 +147,15 @@ export const C1GradientAscentParameterDTO: GradientAscentParameters = {
         { id: "layers", domain: { type: DomainTypes.DISCRETE, optimise: true, min: 1, max: 3, derivativeStepSize: 1 } },
         {
             id: "gains.influence",
-            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.1,derivativeStepSize: 0.01 }
-            
+            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.1, derivativeStepSize: 0.01 }
         },
         {
             id: "gains.judgment",
-            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.1,derivativeStepSize: 0.01 }
-            
+            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.1, derivativeStepSize: 0.01 }
         },
         {
             id: "gains.incentive",
-            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.0001,derivativeStepSize: 0.00001 },
-            
+            domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.0001, derivativeStepSize: 0.00001 }
         },
         {
             id: "actionStateProbability",
@@ -168,10 +175,7 @@ export const C1GradientAscentParameterDTO: GradientAscentParameters = {
             domain: {
                 type: DomainTypes.CATEGORICAL,
                 optimise: true,
-                categories: [
-                    C1MatrixInitTypes.HYBRID,
-                    C1MatrixInitTypes.PURPOSEFUL
-                ]
+                categories: [C1MatrixInitTypes.HYBRID, C1MatrixInitTypes.PURPOSEFUL]
             }
         },
         {
