@@ -1,5 +1,6 @@
 import { DomainTypes, GradientAscentParameters, ModelIndexDTO } from "aethon-arion-pipeline";
 import { C1Model } from "../classes/pipeline/c1-model.class";
+import { C1ConfiguratorParamData } from "../interfaces/c1.interfaces";
 
 // BASE CONSTANTS --------------------------------
 export const C1ModelName: string = "C1";
@@ -134,14 +135,14 @@ export enum KPIFactoryIndex {
     PLAN_VS_ACTUALS = "Plan vs Actuals"
 }
 
-// GRADIENT ASCENT  ---------------------------------
-export const C1GradientAscentOptimiserName = "C1GradientAscentOptimiser";
-export const C1GradientAscentParameterDTO: GradientAscentParameters = {
+// OPTIMISER --------------------------------
+export const C1GradientAscentParameterDefaultDTO: GradientAscentParameters = {
     iterations: {
         learningRate: 0.001,
         tolerance: 0.001,
         max: 1000
     },
+    init: { type: "random" },
     parameterSpace: [
         { id: "spans", domain: { type: DomainTypes.DISCRETE, optimise: true, min: 1, max: 5, derivativeStepSize: 1 } },
         { id: "layers", domain: { type: DomainTypes.DISCRETE, optimise: true, min: 1, max: 3, derivativeStepSize: 1 } },
@@ -219,6 +220,31 @@ export const C1GradientAscentParameterDTO: GradientAscentParameters = {
             domain: { type: DomainTypes.CONTINUOUS, optimise: false, default: 1 }
         }
     ]
+};
+
+// CONFIGURATORS --------------------------------
+export const C1BaseConfiguratorDefaultData: C1ConfiguratorParamData = {
+    spans: 1,
+    layers: 1,
+    gains: {
+        influence: 0.00001,
+        judgment: 0.00001,
+        incentive: 0.00000001
+    },
+    actionStateProbability: 0.85,
+    graph: "teams",
+    matrixInit: {
+        influence: "random",
+        judgment: "random",
+        incentive: "random"
+    },
+    reporting: {
+        unitPayroll: 1,
+        unitPrice: 1
+    },
+    board: {
+        controlStep: false
+    }
 };
 
 // The C1 model

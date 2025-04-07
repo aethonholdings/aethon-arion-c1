@@ -21,10 +21,7 @@ import { C1Model } from "../pipeline/c1-model.class";
 import { C1ConfiguratorParamData } from "../../interfaces/c1.interfaces";
 
 export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<
-    C1ConfiguratorParamData,
-    GradientAscentParameters,
-    GradientAscentOptimiserData<C1ConfiguratorParamData>
-> {
+    C1ConfiguratorParamData> {
     constructor(model: C1Model) {
         super(KPIFactoryIndex.PLAN_VS_ACTUALS, model);
     }

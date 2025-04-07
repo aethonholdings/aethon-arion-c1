@@ -1,8 +1,7 @@
-import { C1GradientAscentOptimiserName, C1MatrixInitTypes } from "../../constants/c1.model.constants";
+import { C1ConfiguratorNames, C1MatrixInitTypes, C1OptimiserNames } from "../../constants/c1.model.constants";
 import { C1ConfiguratorParamData } from "../../interfaces/c1.interfaces";
 import {
     GradientAscentOptimiser,
-    Model,
     OptimiserStateDTO,
     States,
     ObjectHash,
@@ -16,6 +15,7 @@ import {
     DomainTypes,
     Domain
 } from "aethon-arion-pipeline";
+import { C1Model } from "../pipeline/c1-model.class";
 
 const flatten = require("flat");
 
@@ -26,37 +26,39 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
 > {
     private _configuratorName: string;
 
-    constructor(
-        model: Model<
-            C1ConfiguratorParamData,
-            GradientAscentParameters,
-            GradientAscentOptimiserData<C1ConfiguratorParamData>
-        >,
-        parameters: GradientAscentParameters
-    ) {
-        super(C1GradientAscentOptimiserName, model, parameters);
-        this._configuratorName = this._model.getDefaultConfigurator().name;
+    constructor(model: C1Model) {
+        super(C1OptimiserNames.GRADIENT_ASCENT, model);
+        this._configuratorName = C1ConfiguratorNames.BASE;
     }
 
-    initialise(simSetDTO: SimSetDTO): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
-        return this._step(true, undefined, simSetDTO);
+    initialise(
+        parameters: GradientAscentParameters,
+        simSetDTO: SimSetDTO
+    ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
+        console.log(parameters);
+        return this._step(parameters, true, undefined, simSetDTO);
     }
 
     step(
+        parameters: GradientAscentParameters,
         stateDTO?: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
         resultsDTO?: ConvergenceTestDTO[]
     ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
         if (stateDTO && resultsDTO) {
-            return this._step(false, stateDTO);
+            return this._step(parameters, false, stateDTO);
         } else {
             throw new Error("Optimiser step requires a state and resultDTO");
         }
     }
 
     update(
+        parameters: GradientAscentParameters,
         state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
         results: ConvergenceTestDTO[]
     ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
+        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
+            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
+        );
         // check if all results required by the state have been received
         if (state && results) {
             // find the x data point that the gradient ascent is based on
@@ -77,7 +79,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 );
                 if (!result) throw new Error(`Not all results were received for optimiserStateId: ${state.id}`);
                 else {
-                    const domain = this._parameterDomains[requiredDataPoint.id];
+                    const domain = parameterDomains[requiredDataPoint.id];
                     requiredDataPoint.status = result.state;
                     if (requiredDataPoint.id === "x") state.performance = result.avgPerformance;
                     // determine the state of overall optimisation step flags based on the state
@@ -136,7 +138,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 state.percentComplete = 100;
                 state.end = new Date();
                 state.durationSec = state.start ? (state.end.getTime() - state.start.getTime()) / 1000 : undefined;
-                let convergenceTest = this._testConvergence(state);
+                let convergenceTest = this._testConvergence(parameters, state);
                 state.converged = convergenceTest.converged;
                 state.optimiserData.moduloDel = convergenceTest.modulo;
             } else if (running) {
@@ -162,6 +164,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     }
 
     private _step(
+        parameters: GradientAscentParameters,
         init: boolean,
         state?: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
         simSetDTO?: SimSetDTO
@@ -169,7 +172,9 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         let newState: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> = {} as OptimiserStateDTO<
             GradientAscentOptimiserData<C1ConfiguratorParamData>
         >;
-
+        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
+            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
+        );
         // check if this is the first simulation step
         if (init) {
             if (simSetDTO) {
@@ -187,9 +192,13 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     optimiserData: {
                         // pick a random configuration within the configuration parameter space as the
                         // initial x data point
-                        dataPoints: [this._getNewDataPoint("x", this._getRandomInit())]
+                        dataPoints: {}
                     }
                 } as OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>;
+                if (parameters.init.type === "random")
+                    newState.optimiserData.dataPoints = [this._getNewDataPoint("x", this._getRandomInit(parameters))];
+                if (parameters.init.type === "defined")
+                    newState.optimiserData.dataPoints = [this._getNewDataPoint("x", parameters.init.config)];
             } else {
                 throw new Error("Initialisation of Optimiser requires a simSetDTO");
             }
@@ -224,8 +233,8 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
 
                 // cycle through all parameters and, for the ones that we are optimising against,
                 // proceed to calculate the next step
-                for (const key in this._parameterDomains) {
-                    const domain = this._parameterDomains[key];
+                for (const key in parameterDomains) {
+                    const domain = parameterDomains[key];
                     if (domain.optimise) {
                         // get the value of the parameter to be optimised
                         let currentXResults = state.optimiserData.dataPoints.filter(
@@ -243,12 +252,18 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                             if (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) {
                                 if (maxPerformanceResult?.data?.outputs?.slope) {
                                     newXConfigFlat[key] = this._boundStep(
+                                        parameters,
                                         currentXConfigFlat[key],
                                         maxPerformanceResult.data.outputs.slope,
                                         domain
                                     );
                                 } else {
-                                    newXConfigFlat[key] = this._boundStep(currentXConfigFlat[key], 0, domain);
+                                    newXConfigFlat[key] = this._boundStep(
+                                        parameters,
+                                        currentXConfigFlat[key],
+                                        0,
+                                        domain
+                                    );
                                 }
                             }
                             if (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) {
@@ -276,20 +291,24 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         // finally, generate the gradient data points
         newState.optimiserData.dataPoints = [
             ...newState.optimiserData.dataPoints,
-            ...this._getGradientPoints(newState.optimiserData.dataPoints[0])
+            ...this._getGradientPoints(parameters, newState.optimiserData.dataPoints[0])
         ];
         return newState;
     }
 
     private _getGradientPoints(
+        parameters: GradientAscentParameters,
         x: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>
     ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[] {
+        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
+            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
+        );
         // this._validateConfiguratorParamData(x.data.inputs.data);
         // calculate the partial derivative along each optimisation dimension
         let del = [] as DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[];
         const xConfigParams: C1ConfiguratorParamData = x.data.inputs.data;
-        for (let key in this._parameterDomains) {
-            const domain = this._parameterDomains[key];
+        for (let key in parameterDomains) {
+            const domain = parameterDomains[key];
             if (domain.optimise) {
                 // create a flat copy of the x configuration parameters
                 let copyOfXConfigFlat = flatten(JSON.parse(JSON.stringify(xConfigParams)));
@@ -376,29 +395,36 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     }
 
     // test convergence by taking the modulo of the del
-    private _testConvergence(state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>): {
+    private _testConvergence(
+        parameters: GradientAscentParameters,
+        state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>
+    ): {
         converged: boolean;
         modulo: number;
     } {
+        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
+            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
+        );
         let modulo: number = 0;
 
         for (let dataPoint of state.optimiserData.dataPoints) {
             // for all parameters (exclude x)...
             if (dataPoint.id !== "x") {
-                const domain = this._parameterDomains[dataPoint.id];
+                const domain = parameterDomains[dataPoint.id];
                 if (domain && domain.optimise) {
                     // for the subset of parameters where we are performing optimisation, there will be components
                     // to the del
                     if (
                         (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) &&
-                        dataPoint.data.outputs.slope && 
-                        dataPoint.data.outputs.xPlusDelta && dataPoint.data.outputs.xDelta
+                        dataPoint.data.outputs.slope &&
+                        dataPoint.data.outputs.xPlusDelta &&
+                        dataPoint.data.outputs.xDelta
                     ) {
                         // for numerical domains, the contribution to the modulo of the del will be a straightforward
                         // square of the slope, unless the variable is at the domain maximum, in which case contribution
                         // will only be made if the slope is negative in which case the gradient ascent can proceed within the
                         // domain
-                        let x: number = dataPoint.data.outputs.xPlusDelta-dataPoint.data.outputs.xDelta;
+                        let x: number = dataPoint.data.outputs.xPlusDelta - dataPoint.data.outputs.xDelta;
                         if (!(x === domain.max && dataPoint.data.outputs.slope > 0))
                             modulo += dataPoint.data.outputs.slope ** 2;
                     } else if (
@@ -422,16 +448,16 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         // take the square root of the modulo
         modulo = Math.sqrt(modulo);
         // check against the tolerance of the optimisation for convergence
-        return { converged: modulo < this._parameters.iterations.tolerance, modulo: modulo };
+        return { converged: modulo < parameters.iterations.tolerance, modulo: modulo };
     }
 
     protected _boundRandom(min: number, max: number): number {
         return Math.random() * (max - min) + min;
     }
 
-    protected _boundStep(x: number, slope: number, domain: Domain): number {
+    protected _boundStep(parameters: GradientAscentParameters, x: number, slope: number, domain: Domain): number {
         if (domain.type === DomainTypes.DISCRETE || domain.type === DomainTypes.CONTINUOUS) {
-            let value: number = x + slope * this._parameters.iterations.learningRate;
+            let value: number = x + slope * parameters.iterations.learningRate;
             if (domain.type === DomainTypes.DISCRETE) {
                 value = Math.round(value);
             }
@@ -445,9 +471,15 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         }
     }
 
-    protected _validateConfiguratorParamData(configuratorParamData: C1ConfiguratorParamData): void {
-        for (const key in this._parameterDomains) {
-            const domain = this._parameterDomains[key];
+    protected _validateConfiguratorParamData(
+        parameters: GradientAscentParameters,
+        configuratorParamData: C1ConfiguratorParamData
+    ): void {
+        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
+            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
+        );
+        for (const key in parameterDomains) {
+            const domain = parameterDomains[key];
             if (domain.optimise && domain.type !== DomainTypes.CATEGORICAL && domain.type !== DomainTypes.BOOLEAN) {
                 // check that the parameter is within the range of the parameter space
                 if (!this._checkRange(configuratorParamData[key], domain.min, domain.max))
@@ -487,12 +519,15 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         };
     }
 
-    private _getRandomInit(): C1ConfiguratorParamData {
+    private _getRandomInit(parameters: GradientAscentParameters): C1ConfiguratorParamData {
         const randomInit: C1ConfiguratorParamData = {} as C1ConfiguratorParamData;
         // return a random point in the parameter space
+        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
+            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
+        );
 
-        for (const key in this._parameterDomains) {
-            const domain = this._parameterDomains[key];
+        for (const key in parameterDomains) {
+            const domain = parameterDomains[key];
             if (!domain.optimise) randomInit[key] = domain.default;
             else {
                 switch (domain.type) {

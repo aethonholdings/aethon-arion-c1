@@ -4,12 +4,12 @@ import {
     Configurator,
     OrgConfigDTO,
     ConfiguratorParamsDTO,
-    GradientAscentOptimiserData,
-    GradientAscentParameters
 } from "aethon-arion-pipeline";
 import {
     C1AgentStateIndex,
     C1AgentStatesArray,
+    C1BaseConfiguratorDefaultData,
+    C1ConfiguratorNames,
     C1ModelClockTickSeconds,
     C1ModelName,
     C1PlantStateVariablesArray,
@@ -24,16 +24,13 @@ import {
 import { C1Model } from "../pipeline/c1-model.class";
 
 export class C1BaseConfigurator extends Configurator<
-    C1ConfiguratorParamData,
-    GradientAscentParameters,
-    GradientAscentOptimiserData<C1ConfiguratorParamData>
-> {
+    C1ConfiguratorParamData> {
     stateCount: number = C1AgentStatesArray.length;
     plantDegreesOfFreedom: number = C1PlantStateVariablesArray.length;
     reportingDegreesOfFreedom: number = C1ReportingVariablesArray.length;
 
     constructor(model: C1Model) {
-        super(model, c1BaseConfiguratorName);
+        super(model, C1ConfiguratorNames.BASE);
     }
 
     generate(params: ConfiguratorParamsDTO<C1ConfiguratorParamData>): OrgConfigDTO {
@@ -187,34 +184,10 @@ export class C1BaseConfigurator extends Configurator<
     getDefaultParams(): ConfiguratorParamsDTO<C1ConfiguratorParamData> {
         return {
             modelName: C1ModelName,
-            configuratorName: c1BaseConfiguratorName,
+            configuratorName: C1ConfiguratorNames.BASE,
             multipleOrgConfigs: true,
-            data: c1BaseConfiguratorDefaultData
+            data: C1BaseConfiguratorDefaultData
         };
     }
 }
 
-export const c1BaseConfiguratorName: string = "C1Configurator";
-export const c1BaseConfiguratorDefaultData: C1ConfiguratorParamData = {
-    spans: 1,
-    layers: 1,
-    gains: {
-        influence: 0.00001,
-        judgment: 0.00001,
-        incentive: 0.00000001
-    },
-    actionStateProbability: 0.85,
-    graph: "teams",
-    matrixInit: {
-        influence: "random",
-        judgment: "random",
-        incentive: "random"
-    },
-    reporting: {
-        unitPayroll: 1,
-        unitPrice: 1
-    },
-    board: {
-        controlStep: false
-    }
-};
