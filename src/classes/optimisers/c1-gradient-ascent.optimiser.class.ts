@@ -136,7 +136,9 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 state.percentComplete = 100;
                 state.end = new Date();
                 state.durationSec = state.start ? (state.end.getTime() - state.start.getTime()) / 1000 : undefined;
-                state.converged = this._testConvergence(state);
+                let convergenceTest = this._testConvergence(state);
+                state.converged = convergenceTest.converged;
+                state.optimiserData.moduloDel = convergenceTest.modulo;
             } else if (running) {
                 state.status = States.RUNNING;
             } else if (failed) {
@@ -205,7 +207,8 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 modelName: state.modelName,
                 optimiserName: state.optimiserName,
                 optimiserData: {
-                    dataPoints: []
+                    dataPoints: [],
+                    moduloDel: undefined
                 }
             };
 
@@ -252,8 +255,8 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                                 // for boolean and categorical domains we will use the parameter value with the highest performance
                                 if (xPrev.data.outputs.performance) {
                                     if (
-                                        maxPerformanceResult?.data?.outputs?.configuratorParameterValue &&
-                                        maxPerformanceResult?.data?.outputs?.performance &&
+                                        maxPerformanceResult.data.outputs.configuratorParameterValue &&
+                                        maxPerformanceResult.data.outputs.performance &&
                                         maxPerformanceResult.data.outputs.performance > xPrev.data.outputs.performance
                                     ) {
                                         newXConfigFlat[key] =
@@ -295,19 +298,19 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                 let xPlusDxOutput: GradientAscentOutput = {} as GradientAscentOutput;
                 // establish the xDelta and new value of x for the parameter to be optimised
                 // first for the case of discrete, continuous and boolean domains
+                let xConfiguratorNewValue: number | string | boolean;
                 if (
                     domain.type === DomainTypes.DISCRETE ||
                     domain.type === DomainTypes.CONTINUOUS ||
                     domain.type === DomainTypes.BOOLEAN
                 ) {
-                    let xConfiguratorNewValue;
-                    let xDelta: number = 0;
-                    let xPlusXDelta: number = 0;
-
+                    let xDelta: number | undefined;
+                    let xPlusXDelta: number | undefined;
+                    xConfiguratorNewValue = 0;
                     // determine the new x
                     // for discrete and continuous domains
                     if (domain.type === DomainTypes.DISCRETE || domain.type === DomainTypes.CONTINUOUS) {
-                        xPlusXDelta = xConfiguratorCurrentValue;
+                        xPlusXDelta = xConfiguratorCurrentValue as number;
                         // if we have hit the domain bounds, step backwards so that we still get a slope estimate
                         // at the boundary.  xDelta will be a negative number
                         if (xConfiguratorCurrentValue < domain.max) {
@@ -316,13 +319,11 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                             xDelta = -Math.min(domain.derivativeStepSize, xConfiguratorCurrentValue - domain.min);
                         }
                         xPlusXDelta += xDelta;
-                        xConfiguratorNewValue = xPlusXDelta;
+                        xConfiguratorNewValue = xPlusXDelta as number;
                     }
                     // for boolean domains, just flip the flag of the input
                     if (domain.type === DomainTypes.BOOLEAN) {
-                        xDelta = xConfiguratorCurrentValue ? -1 : 1;
-                        xPlusXDelta += xDelta;
-                        xConfiguratorNewValue = xPlusXDelta ? true : false;
+                        xConfiguratorNewValue = !(xConfiguratorCurrentValue as boolean);
                     }
                     // using the calculated values of the new x and xDelta, create a new data point
                     // that will be used to estimate the partial derivative along the optimisation dimension
@@ -330,9 +331,14 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     copyOfXConfigFlat[key] = xPlusXDelta;
                     let xPlusDxConfigParams = flatten.unflatten(copyOfXConfigFlat);
                     xPlusDxOutput = {
+                        id: key,
+                        domain: domain,
                         configuratorParameterValue: xConfiguratorNewValue,
                         xPlusDelta: xPlusXDelta,
-                        xDelta: xDelta
+                        xDelta: xDelta,
+                        slope: undefined,
+                        performance: undefined,
+                        performanceDelta: undefined
                     };
                     del.push(this._getNewDataPoint(key, xPlusDxConfigParams, xPlusDxOutput));
                 }
@@ -350,7 +356,16 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                             // using the calculated values of the new x and xDelta, create a new data point
                             // that will be used to estimate the partial derivative along the optimisation dimension
                             // of the parameter key
-                            xPlusDxOutput.configuratorParameterValue = xConfiguratorNewValue;
+                            xPlusDxOutput = {
+                                id: key,
+                                domain: domain,
+                                configuratorParameterValue: xConfiguratorNewValue,
+                                xPlusDelta: undefined,
+                                xDelta: undefined,
+                                slope: undefined,
+                                performance: undefined,
+                                performanceDelta: undefined
+                            };
                             del.push(this._getNewDataPoint(key, xPlusDxConfigParams, xPlusDxOutput));
                         }
                     }
@@ -361,7 +376,10 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     }
 
     // test convergence by taking the modulo of the del
-    private _testConvergence(state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>): boolean {
+    private _testConvergence(state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>): {
+        converged: boolean;
+        modulo: number;
+    } {
         let modulo: number = 0;
 
         for (let dataPoint of state.optimiserData.dataPoints) {
@@ -373,13 +391,15 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                     // to the del
                     if (
                         (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) &&
-                        dataPoint.data.outputs.slope
+                        dataPoint.data.outputs.slope && 
+                        dataPoint.data.outputs.xPlusDelta && dataPoint.data.outputs.xDelta
                     ) {
                         // for numerical domains, the contribution to the modulo of the del will be a straightforward
                         // square of the slope, unless the variable is at the domain maximum, in which case contribution
                         // will only be made if the slope is negative in which case the gradient ascent can proceed within the
                         // domain
-                        if (!(dataPoint.data.outputs.xPlusDelta === domain.max && dataPoint.data.outputs.slope > 0))
+                        let x: number = dataPoint.data.outputs.xPlusDelta-dataPoint.data.outputs.xDelta;
+                        if (!(x === domain.max && dataPoint.data.outputs.slope > 0))
                             modulo += dataPoint.data.outputs.slope ** 2;
                     } else if (
                         (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) &&
@@ -402,7 +422,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         // take the square root of the modulo
         modulo = Math.sqrt(modulo);
         // check against the tolerance of the optimisation for convergence
-        return modulo < this._parameters.iterations.tolerance;
+        return { converged: modulo < this._parameters.iterations.tolerance, modulo: modulo };
     }
 
     protected _boundRandom(min: number, max: number): number {
