@@ -35,7 +35,6 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         parameters: GradientAscentParameters,
         simSetDTO: SimSetDTO
     ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
-        console.log(parameters);
         return this._step(parameters, true, undefined, simSetDTO);
     }
 
