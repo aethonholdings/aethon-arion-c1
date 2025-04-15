@@ -1,6 +1,6 @@
 {
   "name": "aethon-arion-c1",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "The Arion C1 model and pipeline class implementations",
   "repository": "github:aethonholdings/aethon-arion-c1",
   "main": "dist/index.js",
@@ -14,7 +14,7 @@
   "author": "Konstantinos Dimitriou",
   "license": "MIT",
   "dependencies": {
-    "aethon-arion-pipeline": "^0.5.0",
+    "aethon-arion-pipeline": "^0.5.1",
     "rxjs": "~7.8.1",
     "flat": "^5.0.2"
   },
