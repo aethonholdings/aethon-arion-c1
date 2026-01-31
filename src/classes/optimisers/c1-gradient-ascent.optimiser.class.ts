@@ -35,7 +35,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         parameters: GradientAscentParameters,
         simSetDTO: SimSetDTO
     ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
-        return this._step(parameters, true, undefined, simSetDTO);
+        return this._createInitialState(parameters, simSetDTO);
     }
 
     step(
@@ -43,11 +43,10 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         stateDTO?: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
         resultsDTO?: ConvergenceTestDTO[]
     ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
-        if (stateDTO && resultsDTO) {
-            return this._step(parameters, false, stateDTO);
-        } else {
+        if (!stateDTO || !resultsDTO) {
             throw new Error("Optimiser step requires a state and resultDTO");
         }
+        return this._createNextState(parameters, stateDTO);
     }
 
     update(
@@ -55,443 +54,483 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
         results: ConvergenceTestDTO[]
     ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
-        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
-            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
-        );
-        // check if all results required by the state have been received
-        if (state && results) {
-            // find the x data point that the gradient ascent is based on
-            const x = state.optimiserData.dataPoints.find((dataPoint) => dataPoint.id === "x");
-            // find the simulation convergence test result corresponding to x because
-            // we will need to access the current estimate of simulation performance
-            const xResult = results.find((result) => result.configuratorParams.hash === x?.data.inputs.hash);
-
-            let completed: boolean = true;
-            let running: boolean = false;
-            let failed: boolean = false;
-
-            // cycle through all the required data points for gradient descent and find the corresponding
-            // simulation ConvergenceTest result.  Then calculate the current estimated outputs for each
-            for (let requiredDataPoint of state.optimiserData.dataPoints) {
-                const result = results.find(
-                    (result) => result.configuratorParams.hash === requiredDataPoint.data.inputs.hash
-                );
-                if (!result) throw new Error(`Not all results were received for optimiserStateId: ${state.id}`);
-                else {
-                    const domain = parameterDomains[requiredDataPoint.id];
-                    requiredDataPoint.status = result.state;
-                    if (requiredDataPoint.id === "x") state.performance = result.avgPerformance;
-                    // determine the state of overall optimisation step flags based on the state
-                    // of the result data points
-                    if (requiredDataPoint.status !== States.COMPLETED) completed = false;
-                    if (requiredDataPoint.status === States.RUNNING) running = true;
-                    if (requiredDataPoint.status === States.FAILED) failed = true;
-
-                    // for all parameters, update the output performance value
-                    // store the current value in prevPerformance before doing so
-                    // as it will be needed to assess which category is showing improved performance
-                    // for categorical variable domains
-                    let prevPerformance = requiredDataPoint.data.outputs.performance
-                        ? requiredDataPoint.data.outputs.performance
-                        : result.avgPerformance; // store the previous value; we will need it
-                    requiredDataPoint.data.outputs.performance = result.avgPerformance; // update to the current result value
-
-                    if (
-                        requiredDataPoint.id !== "x" &&
-                        (requiredDataPoint.status === States.COMPLETED || result.state === States.RUNNING)
-                    ) {
-                        // for categorical domain parameters, update the output next step category
-                        // maximising performance
-                        if (
-                            prevPerformance &&
-                            requiredDataPoint.data.outputs.performance &&
-                            requiredDataPoint.data.outputs.performance > prevPerformance &&
-                            domain &&
-                            (domain.type === DomainTypes.CATEGORICAL || domain.type === DomainTypes.BOOLEAN)
-                        ) {
-                            requiredDataPoint.data.outputs.configuratorParameterValue = flatten(
-                                result.configuratorParams.data
-                            )[requiredDataPoint.id];
-                        }
-                        // for all parameters, update the performance delta to the x point
-                        // as well as the slope, where applicable (where an xDelta exists)
-                        if (xResult) {
-                            if (requiredDataPoint.id !== "x") {
-                                requiredDataPoint.data.outputs.performanceDelta =
-                                    result.avgPerformance - xResult.avgPerformance;
-                                if (requiredDataPoint.data.outputs.xDelta) {
-                                    requiredDataPoint.data.outputs.slope =
-                                        requiredDataPoint.data.outputs.performanceDelta /
-                                        requiredDataPoint.data.outputs.xDelta;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // check the completed flag to see if all required data point result convergence test
-            // were completed; in this case, all results for the state have been fully calculated
-            state.converged = false;
-            if (completed) {
-                state.status = States.COMPLETED;
-                state.percentComplete = 100;
-                state.end = new Date();
-                state.durationSec = state.start ? (state.end.getTime() - state.start.getTime()) / 1000 : undefined;
-                let convergenceTest = this._testConvergence(parameters, state);
-                state.converged = convergenceTest.converged;
-                state.optimiserData.moduloDel = convergenceTest.modulo;
-            } else if (running) {
-                state.status = States.RUNNING;
-            } else if (failed) {
-                state.status = States.FAILED;
-                state.percentComplete = undefined;
-                throw new Error("Optimiser state update failed; one or more results failed");
-            }
-        } else {
-            throw new Error("Invalid parameters for update; either provide a state and results or a simSet");
+        if (!state || !results) {
+            throw new Error("Invalid parameters for update; provide both state and results");
         }
+
+        const parameterDomains = this._getParameterDomains(parameters);
+
+        // Update all data points with their corresponding results
+        this._updateDataPointsWithResults(state, results, parameterDomains);
+
+        // Update overall state status
+        this._updateStateStatus(state);
+
+        // Test for convergence if all data points are completed
+        if (state.status === States.COMPLETED) {
+            const convergenceTest = this._testConvergence(parameters, state);
+            state.converged = convergenceTest.converged;
+            state.optimiserData.moduloDel = convergenceTest.modulo;
+            state.end = new Date();
+            state.durationSec = state.start ? (state.end.getTime() - state.start.getTime()) / 1000 : undefined;
+        }
+
         return state;
     }
 
-    // get the required configurator parameters for the current state; will returned array of structured objects
-    // holding the ConfiguratorParameterData that will be required for all simulations the results of which will be
-    // needed as inputs to asses the gradient and x values for the optimiser
     getStateRequiredConfiguratorParams(
         state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>
     ): ConfiguratorParamsDTO<C1ConfiguratorParamData>[] {
         return state.optimiserData.dataPoints.map((dataPoint) => dataPoint.data.inputs);
     }
 
-    private _step(
+    // ============================================================================
+    // PRIVATE METHODS - State Creation
+    // ============================================================================
+
+    private _createInitialState(
         parameters: GradientAscentParameters,
-        init: boolean,
-        state?: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
-        simSetDTO?: SimSetDTO
+        simSetDTO: SimSetDTO
     ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
-        let newState: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> = {} as OptimiserStateDTO<
-            GradientAscentOptimiserData<C1ConfiguratorParamData>
-        >;
-        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
-            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
-        );
-        // check if this is the first simulation step
-        if (init) {
-            if (simSetDTO) {
-                // this is the first step, so stepCount is zero;
-                // initialise the first OptimisationStep
-                newState = {
-                    modelName: this.model.name,
-                    optimiserName: this.name,
-                    converged: false,
-                    start: new Date(),
-                    percentComplete: 0,
-                    status: States.PENDING,
-                    stepCount: 0,
-                    simSet: simSetDTO,
-                    optimiserData: {
-                        // pick a random configuration within the configuration parameter space as the
-                        // initial x data point
-                        dataPoints: {}
-                    }
-                } as OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>;
-                if (parameters.init.type === "random")
-                    newState.optimiserData.dataPoints = [this._getNewDataPoint("x", this._getRandomInit(parameters))];
-                if (parameters.init.type === "defined")
-                    newState.optimiserData.dataPoints = [this._getNewDataPoint("x", parameters.init.config)];
-            } else {
-                throw new Error("Initialisation of Optimiser requires a simSetDTO");
+        // Generate initial x point (random or defined)
+        const initialConfig = parameters.init.type === "random"
+            ? this._getRandomInit(parameters)
+            : parameters.init.config;
+
+        const xDataPoint = this._createDataPoint("x", initialConfig);
+        const gradientPoints = this._generateGradientPoints(parameters, xDataPoint);
+
+        return {
+            modelName: this.model.name,
+            optimiserName: this.name,
+            converged: false,
+            start: new Date(),
+            percentComplete: 0,
+            status: States.PENDING,
+            stepCount: 0,
+            simSet: simSetDTO,
+            optimiserData: {
+                dataPoints: [xDataPoint, ...gradientPoints]
+            }
+        } as OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>;
+    }
+
+    private _createNextState(
+        parameters: GradientAscentParameters,
+        previousState: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>
+    ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
+        if (previousState.status !== States.COMPLETED) {
+            throw new Error("Cannot step from a state that is not completed");
+        }
+
+        const parameterDomains = this._getParameterDomains(parameters);
+        const previousX = this._getXDataPoint(previousState);
+
+        // Calculate new x by stepping along gradient
+        const newXConfig = this._calculateNextX(parameters, previousState, previousX, parameterDomains);
+        const newXDataPoint = this._createDataPoint("x", newXConfig);
+        const gradientPoints = this._generateGradientPoints(parameters, newXDataPoint);
+
+        return {
+            stepCount: previousState.stepCount + 1,
+            simSet: previousState.simSet,
+            status: States.PENDING,
+            converged: false,
+            percentComplete: 0,
+            modelName: previousState.modelName,
+            optimiserName: previousState.optimiserName,
+            optimiserData: {
+                dataPoints: [newXDataPoint, ...gradientPoints],
+                moduloDel: undefined
+            }
+        } as OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>;
+    }
+
+    // ============================================================================
+    // PRIVATE METHODS - Gradient Point Generation
+    // ============================================================================
+
+    private _generateGradientPoints(
+        parameters: GradientAscentParameters,
+        xDataPoint: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>
+    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[] {
+        const parameterDomains = this._getParameterDomains(parameters);
+        const xConfigFlat = flatten(xDataPoint.data.inputs.data);
+        const gradientPoints: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[] = [];
+
+        for (const [parameterId, domain] of Object.entries(parameterDomains)) {
+            if (!domain.optimise) continue;
+
+            const currentValue = xConfigFlat[parameterId];
+
+            if (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) {
+                const point = this._createNumericalGradientPoint(parameterId, currentValue, domain, xConfigFlat);
+                gradientPoints.push(point);
+            } else if (domain.type === DomainTypes.BOOLEAN) {
+                const point = this._createBooleanGradientPoint(parameterId, currentValue, domain, xConfigFlat);
+                gradientPoints.push(point);
+            } else if (domain.type === DomainTypes.CATEGORICAL) {
+                const points = this._createCategoricalGradientPoints(parameterId, currentValue, domain, xConfigFlat);
+                gradientPoints.push(...points);
             }
         }
-        // this is not the first optimisation step
-        else if (!init && state && state.status === States.COMPLETED) {
-            // we are stepping out of an existing state, so copy the basic key variables from the existing
-            // state object passed to this function
-            newState = {
-                stepCount: state.stepCount + 1,
-                simSet: state.simSet,
-                status: States.PENDING,
-                converged: false,
-                percentComplete: 0,
-                modelName: state.modelName,
-                optimiserName: state.optimiserName,
-                optimiserData: {
-                    dataPoints: [],
-                    moduloDel: undefined
-                }
+
+        return gradientPoints;
+    }
+
+    private _createNumericalGradientPoint(
+        parameterId: string,
+        currentValue: number,
+        domain: Domain,
+        xConfigFlat: any
+    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput> {
+        // Type guard: ensure domain has numerical properties
+        if (!domain.optimise || (domain.type !== DomainTypes.CONTINUOUS && domain.type !== DomainTypes.DISCRETE)) {
+            throw new Error(`Domain ${parameterId} is not an optimisable numerical domain`);
+        }
+
+        // Calculate step size (derivative step)
+        let stepSize: number;
+        if (currentValue < domain.max) {
+            // Step forward if not at max
+            stepSize = Math.min(domain.derivativeStepSize, domain.max - currentValue);
+        } else {
+            // Step backward if at max boundary
+            stepSize = -Math.min(domain.derivativeStepSize, currentValue - domain.min);
+        }
+
+        const perturbedValue = currentValue + stepSize;
+        const perturbedConfigFlat = { ...xConfigFlat, [parameterId]: perturbedValue };
+        const perturbedConfig = flatten.unflatten(perturbedConfigFlat);
+
+        const output: GradientAscentOutput = {
+            id: parameterId,
+            domain: domain,
+            configuratorParameterValue: perturbedValue,
+            xPlusDelta: perturbedValue,
+            xDelta: stepSize,
+            slope: undefined,
+            performance: undefined,
+            performanceDelta: undefined
+        };
+
+        return this._createDataPoint(parameterId, perturbedConfig, output);
+    }
+
+    private _createBooleanGradientPoint(
+        parameterId: string,
+        currentValue: boolean,
+        domain: Domain,
+        xConfigFlat: any
+    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput> {
+        const perturbedValue = !currentValue;
+        const perturbedConfigFlat = { ...xConfigFlat, [parameterId]: perturbedValue };
+        const perturbedConfig = flatten.unflatten(perturbedConfigFlat);
+
+        const output: GradientAscentOutput = {
+            id: parameterId,
+            domain: domain,
+            configuratorParameterValue: perturbedValue,
+            xPlusDelta: undefined,
+            xDelta: undefined,
+            slope: undefined,
+            performance: undefined,
+            performanceDelta: undefined
+        };
+
+        return this._createDataPoint(parameterId, perturbedConfig, output);
+    }
+
+    private _createCategoricalGradientPoints(
+        parameterId: string,
+        currentValue: string,
+        domain: Domain,
+        xConfigFlat: any
+    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[] {
+        // Type guard: ensure domain is categorical
+        if (domain.type !== DomainTypes.CATEGORICAL || !domain.optimise) {
+            throw new Error(`Domain ${parameterId} is not an optimisable categorical domain`);
+        }
+
+        if (!domain.categories || domain.categories.length === 0) {
+            throw new Error(`Domain ${parameterId} is categorical but has no categories defined`);
+        }
+
+        const points: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[] = [];
+        const currentCategoryIndex = domain.categories.indexOf(currentValue);
+
+        // Create a gradient point for each alternative category
+        for (let i = 0; i < domain.categories.length; i++) {
+            if (i === currentCategoryIndex) continue; // Skip current value
+
+            const perturbedValue = domain.categories[i];
+            const perturbedConfigFlat = { ...xConfigFlat, [parameterId]: perturbedValue };
+            const perturbedConfig = flatten.unflatten(perturbedConfigFlat);
+
+            const output: GradientAscentOutput = {
+                id: parameterId,
+                domain: domain,
+                configuratorParameterValue: perturbedValue,
+                xPlusDelta: undefined,
+                xDelta: undefined,
+                slope: undefined,
+                performance: undefined,
+                performanceDelta: undefined
             };
 
-            // copy the current x data point on which the new point will be based
-            let xPrev: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput> | undefined =
-                state.optimiserData.dataPoints.find((dataPoint) => dataPoint.id === "x");
-            if (xPrev) {
-                // flatten the configurator parameters used for the x poimt for easy reference
-                let currentXConfigFlat = flatten(JSON.parse(JSON.stringify(xPrev.data.inputs.data)));
-                // copy the current x configurator parameters to a new object to use
-                // for the new x that we are stepping to
-                let newXConfigFlat = JSON.parse(JSON.stringify(currentXConfigFlat));
-
-                // cycle through all parameters and, for the ones that we are optimising against,
-                // proceed to calculate the next step
-                for (const key in parameterDomains) {
-                    const domain = parameterDomains[key];
-                    if (domain.optimise) {
-                        // get the value of the parameter to be optimised
-                        let currentXResults = state.optimiserData.dataPoints.filter(
-                            (dataPoint) => dataPoint.id === key
-                        );
-                        // establish the new value of x for the parameter to be optimised
-                        if (currentXResults.length > 0) {
-                            let maxPerformanceResult = currentXResults.sort((a, b) => {
-                                if (a.data.outputs.performance && b.data.outputs.performance) {
-                                    return a.data.outputs.performance - b.data.outputs.performance;
-                                } else {
-                                    return 0;
-                                }
-                            })[0];
-                            if (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) {
-                                if (maxPerformanceResult?.data?.outputs?.slope) {
-                                    newXConfigFlat[key] = this._boundStep(
-                                        parameters,
-                                        currentXConfigFlat[key],
-                                        maxPerformanceResult.data.outputs.slope,
-                                        domain
-                                    );
-                                } else {
-                                    newXConfigFlat[key] = this._boundStep(
-                                        parameters,
-                                        currentXConfigFlat[key],
-                                        0,
-                                        domain
-                                    );
-                                }
-                            }
-                            if (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) {
-                                // for boolean and categorical domains we will use the parameter value with the highest performance
-                                if (xPrev.data.outputs.performance) {
-                                    if (
-                                        maxPerformanceResult.data.outputs.configuratorParameterValue &&
-                                        maxPerformanceResult.data.outputs.performance &&
-                                        maxPerformanceResult.data.outputs.performance > xPrev.data.outputs.performance
-                                    ) {
-                                        newXConfigFlat[key] =
-                                            maxPerformanceResult.data.outputs.configuratorParameterValue;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                newState.optimiserData.dataPoints.push(this._getNewDataPoint("x", flatten.unflatten(newXConfigFlat)));
-            } else {
-                throw new Error("Could not find data point for x");
-            }
+            points.push(this._createDataPoint(parameterId, perturbedConfig, output));
         }
 
-        // finally, generate the gradient data points
-        newState.optimiserData.dataPoints = [
-            ...newState.optimiserData.dataPoints,
-            ...this._getGradientPoints(parameters, newState.optimiserData.dataPoints[0])
-        ];
-        return newState;
+        return points;
     }
 
-    private _getGradientPoints(
+    // ============================================================================
+    // PRIVATE METHODS - State Updates
+    // ============================================================================
+
+    private _updateDataPointsWithResults(
+        state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
+        results: ConvergenceTestDTO[],
+        parameterDomains: { [key: string]: Domain }
+    ): void {
+        const xDataPoint = this._getXDataPoint(state);
+        const xResult = results.find((result) => result.configuratorParams.hash === xDataPoint.data.inputs.hash);
+
+        if (!xResult) {
+            throw new Error(`Result for x point not found in optimiser state ${state.id}`);
+        }
+
+        // Update x point performance
+        xDataPoint.data.outputs.performance = xResult.avgPerformance;
+        xDataPoint.status = xResult.state;
+        state.performance = xResult.avgPerformance;
+
+        // Update all gradient points
+        for (const dataPoint of state.optimiserData.dataPoints) {
+            if (dataPoint.id === "x") continue;
+
+            const result = results.find((r) => r.configuratorParams.hash === dataPoint.data.inputs.hash);
+            if (!result) {
+                throw new Error(`Result not found for data point ${dataPoint.id} in optimiser state ${state.id}`);
+            }
+
+            dataPoint.status = result.state;
+            dataPoint.data.outputs.performance = result.avgPerformance;
+            dataPoint.data.outputs.performanceDelta = result.avgPerformance - xResult.avgPerformance;
+
+            const domain = parameterDomains[dataPoint.id];
+            if (!domain) continue;
+
+            // Calculate slope for numerical domains
+            if ((domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) &&
+                dataPoint.data.outputs.xDelta !== undefined &&
+                dataPoint.data.outputs.performanceDelta !== undefined) {
+                dataPoint.data.outputs.slope = dataPoint.data.outputs.performanceDelta / dataPoint.data.outputs.xDelta;
+            }
+        }
+    }
+
+    private _updateStateStatus(
+        state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>
+    ): void {
+        let allCompleted = true;
+        let anyRunning = false;
+        let anyFailed = false;
+
+        for (const dataPoint of state.optimiserData.dataPoints) {
+            if (dataPoint.status !== States.COMPLETED) allCompleted = false;
+            if (dataPoint.status === States.RUNNING) anyRunning = true;
+            if (dataPoint.status === States.FAILED) anyFailed = true;
+        }
+
+        if (anyFailed) {
+            state.status = States.FAILED;
+            state.percentComplete = undefined;
+            throw new Error("Optimiser state update failed; one or more results failed");
+        } else if (allCompleted) {
+            state.status = States.COMPLETED;
+            state.percentComplete = 100;
+        } else if (anyRunning) {
+            state.status = States.RUNNING;
+        }
+    }
+
+    // ============================================================================
+    // PRIVATE METHODS - Next X Calculation
+    // ============================================================================
+
+    private _calculateNextX(
         parameters: GradientAscentParameters,
-        x: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>
-    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[] {
-        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
-            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
-        );
-        // this._validateConfiguratorParamData(x.data.inputs.data);
-        // calculate the partial derivative along each optimisation dimension
-        let del = [] as DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[];
-        const xConfigParams: C1ConfiguratorParamData = x.data.inputs.data;
-        for (let key in parameterDomains) {
-            const domain = parameterDomains[key];
-            if (domain.optimise) {
-                // create a flat copy of the x configuration parameters
-                let copyOfXConfigFlat = flatten(JSON.parse(JSON.stringify(xConfigParams)));
-                // get the value of the parameter to be optimised
-                let xConfiguratorCurrentValue = copyOfXConfigFlat[key];
-                let xPlusDxOutput: GradientAscentOutput = {} as GradientAscentOutput;
-                // establish the xDelta and new value of x for the parameter to be optimised
-                // first for the case of discrete, continuous and boolean domains
-                let xConfiguratorNewValue: number | string | boolean;
-                if (
-                    domain.type === DomainTypes.DISCRETE ||
-                    domain.type === DomainTypes.CONTINUOUS ||
-                    domain.type === DomainTypes.BOOLEAN
-                ) {
-                    let xDelta: number | undefined;
-                    let xPlusXDelta: number | undefined;
-                    xConfiguratorNewValue = 0;
-                    // determine the new x
-                    // for discrete and continuous domains
-                    if (domain.type === DomainTypes.DISCRETE || domain.type === DomainTypes.CONTINUOUS) {
-                        xPlusXDelta = xConfiguratorCurrentValue as number;
-                        // if we have hit the domain bounds, step backwards so that we still get a slope estimate
-                        // at the boundary.  xDelta will be a negative number
-                        if (xConfiguratorCurrentValue < domain.max) {
-                            xDelta = Math.min(domain.derivativeStepSize, domain.max - xConfiguratorCurrentValue);
-                        } else {
-                            xDelta = -Math.min(domain.derivativeStepSize, xConfiguratorCurrentValue - domain.min);
-                        }
-                        xPlusXDelta += xDelta;
-                        xConfiguratorNewValue = xPlusXDelta as number;
-                    }
-                    // for boolean domains, just flip the flag of the input
-                    if (domain.type === DomainTypes.BOOLEAN) {
-                        xConfiguratorNewValue = !(xConfiguratorCurrentValue as boolean);
-                    }
-                    // using the calculated values of the new x and xDelta, create a new data point
-                    // that will be used to estimate the partial derivative along the optimisation dimension
-                    // of the parameter key
-                    copyOfXConfigFlat[key] = xPlusXDelta;
-                    let xPlusDxConfigParams = flatten.unflatten(copyOfXConfigFlat);
-                    xPlusDxOutput = {
-                        id: key,
-                        domain: domain,
-                        configuratorParameterValue: xConfiguratorNewValue,
-                        xPlusDelta: xPlusXDelta,
-                        xDelta: xDelta,
-                        slope: undefined,
-                        performance: undefined,
-                        performanceDelta: undefined
-                    };
-                    del.push(this._getNewDataPoint(key, xPlusDxConfigParams, xPlusDxOutput));
-                }
-                // in categorical domains, we will need to get data points for each category in order to figure out
-                // which to which category to move in the gradient ascent
-                if (domain.type === DomainTypes.CATEGORICAL) {
-                    let currentCategoryIndex = domain.categories.indexOf(xConfiguratorCurrentValue);
-                    for (let i = 0; i < domain.categories.length; i++) {
-                        if (i !== currentCategoryIndex) {
-                            let xConfiguratorNewValue;
-                            // establish the new value of x for the parameter to be optimised
-                            xConfiguratorNewValue = domain.categories[i];
-                            copyOfXConfigFlat[key] = xConfiguratorNewValue;
-                            let xPlusDxConfigParams = flatten.unflatten(copyOfXConfigFlat);
-                            // using the calculated values of the new x and xDelta, create a new data point
-                            // that will be used to estimate the partial derivative along the optimisation dimension
-                            // of the parameter key
-                            xPlusDxOutput = {
-                                id: key,
-                                domain: domain,
-                                configuratorParameterValue: xConfiguratorNewValue,
-                                xPlusDelta: undefined,
-                                xDelta: undefined,
-                                slope: undefined,
-                                performance: undefined,
-                                performanceDelta: undefined
-                            };
-                            del.push(this._getNewDataPoint(key, xPlusDxConfigParams, xPlusDxOutput));
-                        }
-                    }
-                }
+        state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
+        previousX: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>,
+        parameterDomains: { [key: string]: Domain }
+    ): C1ConfiguratorParamData {
+        const previousXConfigFlat = flatten(previousX.data.inputs.data);
+        const newXConfigFlat = { ...previousXConfigFlat };
+
+        for (const [parameterId, domain] of Object.entries(parameterDomains)) {
+            if (!domain.optimise) continue;
+
+            const gradientDataPoints = state.optimiserData.dataPoints.filter(dp => dp.id === parameterId);
+            if (gradientDataPoints.length === 0) continue;
+
+            const currentValue = previousXConfigFlat[parameterId];
+
+            if (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) {
+                newXConfigFlat[parameterId] = this._calculateNextNumericalValue(
+                    parameters,
+                    currentValue,
+                    gradientDataPoints,
+                    domain
+                );
+            } else if (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) {
+                newXConfigFlat[parameterId] = this._calculateNextCategoricalValue(
+                    previousX,
+                    gradientDataPoints
+                );
             }
         }
-        return del;
+
+        return flatten.unflatten(newXConfigFlat);
     }
 
-    // test convergence by taking the modulo of the del
+    private _calculateNextNumericalValue(
+        parameters: GradientAscentParameters,
+        currentValue: number,
+        gradientDataPoints: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[],
+        domain: Domain
+    ): number {
+        // FIXED: Sort in descending order to get maximum performance
+        const bestDataPoint = gradientDataPoints.sort((a, b) => {
+            const perfA = a.data.outputs.performance ?? -Infinity;
+            const perfB = b.data.outputs.performance ?? -Infinity;
+            return perfB - perfA; // Descending order
+        })[0];
+
+        const slope = bestDataPoint?.data?.outputs?.slope ?? 0;
+        return this._boundStep(parameters, currentValue, slope, domain);
+    }
+
+    private _calculateNextCategoricalValue(
+        previousX: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>,
+        gradientDataPoints: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[]
+    ): any {
+        // FIXED: Sort in descending order to get maximum performance
+        const bestDataPoint = gradientDataPoints.sort((a, b) => {
+            const perfA = a.data.outputs.performance ?? -Infinity;
+            const perfB = b.data.outputs.performance ?? -Infinity;
+            return perfB - perfA; // Descending order
+        })[0];
+
+        const previousPerformance = previousX.data.outputs.performance ?? -Infinity;
+        const bestPerformance = bestDataPoint?.data.outputs.performance ?? -Infinity;
+
+        // Only switch if the new category performs better
+        if (bestPerformance > previousPerformance && bestDataPoint.data.outputs.configuratorParameterValue !== undefined) {
+            return bestDataPoint.data.outputs.configuratorParameterValue;
+        }
+
+        // Otherwise keep current value
+        const previousXConfigFlat = flatten(previousX.data.inputs.data);
+        return previousXConfigFlat[bestDataPoint.id];
+    }
+
+    // ============================================================================
+    // PRIVATE METHODS - Convergence Testing
+    // ============================================================================
+
     private _testConvergence(
         parameters: GradientAscentParameters,
         state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>
-    ): {
-        converged: boolean;
-        modulo: number;
-    } {
-        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
-            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
-        );
-        let modulo: number = 0;
+    ): { converged: boolean; modulo: number } {
+        const parameterDomains = this._getParameterDomains(parameters);
+        let moduloSquared: number = 0;
 
-        for (let dataPoint of state.optimiserData.dataPoints) {
-            // for all parameters (exclude x)...
-            if (dataPoint.id !== "x") {
-                const domain = parameterDomains[dataPoint.id];
-                if (domain && domain.optimise) {
-                    // for the subset of parameters where we are performing optimisation, there will be components
-                    // to the del
-                    if (
-                        (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) &&
-                        dataPoint.data.outputs.slope &&
-                        dataPoint.data.outputs.xPlusDelta &&
-                        dataPoint.data.outputs.xDelta
-                    ) {
-                        // for numerical domains, the contribution to the modulo of the del will be a straightforward
-                        // square of the slope, unless the variable is at the domain maximum, in which case contribution
-                        // will only be made if the slope is negative in which case the gradient ascent can proceed within the
-                        // domain
-                        let x: number = dataPoint.data.outputs.xPlusDelta - dataPoint.data.outputs.xDelta;
-                        if (!(x === domain.max && dataPoint.data.outputs.slope > 0))
-                            modulo += dataPoint.data.outputs.slope ** 2;
-                    } else if (
-                        (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) &&
-                        dataPoint.data.outputs.performanceDelta
-                    ) {
-                        // for categorical and boolean domains, if the expected performance change is not positive,
-                        // then there is no further scope for optimisation; therefore the contribution to the del is
-                        // the expected performance change along the optimisation dimension, otherwise it is zero
-                        // not taking a square here to avoid overflow due to hight numbers
-                        if (dataPoint.data.outputs.performanceDelta > 0)
-                            modulo += dataPoint.data.outputs.performanceDelta;
-                    }
-                } else {
-                    throw new Error(
-                        `Domain ${domain} not found or insufficient output data to test convergence for optimiser state id:${state.id}`
-                    );
+        for (const dataPoint of state.optimiserData.dataPoints) {
+            if (dataPoint.id === "x") continue;
+
+            const domain = parameterDomains[dataPoint.id];
+            if (!domain?.optimise) continue;
+
+            if ((domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) && domain.optimise) {
+                const slope = dataPoint.data.outputs.slope;
+                const xPlusDelta = dataPoint.data.outputs.xPlusDelta;
+                const xDelta = dataPoint.data.outputs.xDelta;
+
+                if (slope === undefined || xPlusDelta === undefined || xDelta === undefined) continue;
+
+                // Calculate original x value
+                const x = xPlusDelta - xDelta;
+
+                // Only contribute to gradient if not at max boundary with positive slope
+                // (if at max and slope is positive, we can't ascend further)
+                if (!(x === domain.max && slope > 0)) {
+                    moduloSquared += slope ** 2;
+                }
+            } else if (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) {
+                const performanceDelta = dataPoint.data.outputs.performanceDelta;
+
+                if (performanceDelta === undefined) continue;
+
+                // FIXED: Square the performance delta for consistency with numerical domains
+                if (performanceDelta > 0) {
+                    moduloSquared += performanceDelta ** 2;
                 }
             }
         }
-        // take the square root of the modulo
-        modulo = Math.sqrt(modulo);
-        // check against the tolerance of the optimisation for convergence
-        return { converged: modulo < parameters.iterations.tolerance, modulo: modulo };
+
+        const modulo = Math.sqrt(moduloSquared);
+        return {
+            converged: modulo < parameters.iterations.tolerance,
+            modulo: modulo
+        };
     }
 
-    protected _boundRandom(min: number, max: number): number {
+    // ============================================================================
+    // PRIVATE METHODS - Utility Functions
+    // ============================================================================
+
+    private _getParameterDomains(parameters: GradientAscentParameters): { [key: string]: Domain } {
+        return Object.fromEntries(
+            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
+        );
+    }
+
+    private _getXDataPoint(
+        state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>
+    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput> {
+        const xDataPoint = state.optimiserData.dataPoints.find((dp) => dp.id === "x");
+        if (!xDataPoint) {
+            throw new Error("Could not find x data point in optimiser state");
+        }
+        return xDataPoint;
+    }
+
+    private _boundStep(parameters: GradientAscentParameters, x: number, slope: number, domain: Domain): number {
+        if (domain.type !== DomainTypes.DISCRETE && domain.type !== DomainTypes.CONTINUOUS) {
+            throw new Error("Bound step can only be performed on numerical parameters");
+        }
+
+        let value = x + slope * parameters.iterations.learningRate;
+
+        // Round if discrete
+        if (domain.type === DomainTypes.DISCRETE) {
+            value = Math.round(value);
+        }
+
+        // Apply bounds (type guard ensures min/max exist)
+        if (domain.optimise) {
+            value = Math.max(domain.min, Math.min(domain.max, value));
+        }
+
+        return value;
+    }
+
+    private _boundRandom(min: number, max: number): number {
         return Math.random() * (max - min) + min;
     }
 
-    protected _boundStep(parameters: GradientAscentParameters, x: number, slope: number, domain: Domain): number {
-        if (domain.type === DomainTypes.DISCRETE || domain.type === DomainTypes.CONTINUOUS) {
-            let value: number = x + slope * parameters.iterations.learningRate;
-            if (domain.type === DomainTypes.DISCRETE) {
-                value = Math.round(value);
-            }
-            if (domain.optimise) {
-                if (value < domain.min) return domain.min;
-                if (value > domain.max) return domain.max;
-            }
-            return value;
-        } else {
-            throw new Error(`Bound step cannot be performed on a parameter that is not a number`);
-        }
-    }
-
-    protected _validateConfiguratorParamData(
-        parameters: GradientAscentParameters,
-        configuratorParamData: C1ConfiguratorParamData
-    ): void {
-        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
-            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
-        );
-        for (const key in parameterDomains) {
-            const domain = parameterDomains[key];
-            if (domain.optimise && domain.type !== DomainTypes.CATEGORICAL && domain.type !== DomainTypes.BOOLEAN) {
-                // check that the parameter is within the range of the parameter space
-                if (!this._checkRange(configuratorParamData[key], domain.min, domain.max))
-                    throw new Error(`The parameter ${key} is out of range`);
-            }
-        }
-    }
-
-    protected _checkRange(value: number, min: number, max: number): boolean {
-        return value >= min && value <= max;
-    }
-
-    protected _getNewDataPoint(
+    private _createDataPoint(
         id: string,
         configParams: C1ConfiguratorParamData,
         outputs: GradientAscentOutput = {} as GradientAscentOutput
@@ -519,36 +558,59 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     }
 
     private _getRandomInit(parameters: GradientAscentParameters): C1ConfiguratorParamData {
-        const randomInit: C1ConfiguratorParamData = {} as C1ConfiguratorParamData;
-        // return a random point in the parameter space
-        const parameterDomains: { [key: string]: Domain } = Object.fromEntries(
-            parameters.parameterSpace.map((parameter) => [parameter.id, parameter.domain])
-        );
+        const parameterDomains = this._getParameterDomains(parameters);
+        const randomInit: any = {};
 
-        for (const key in parameterDomains) {
-            const domain = parameterDomains[key];
-            if (!domain.optimise) randomInit[key] = domain.default;
-            else {
-                switch (domain.type) {
-                    case DomainTypes.DISCRETE:
+        for (const [key, domain] of Object.entries(parameterDomains)) {
+            if (!domain.optimise) {
+                randomInit[key] = domain.default;
+                continue;
+            }
+
+            switch (domain.type) {
+                case DomainTypes.DISCRETE:
+                    if (domain.optimise) {
                         randomInit[key] = Math.floor(Math.random() * (domain.max - domain.min + 1)) + domain.min;
-                        break;
-                    case DomainTypes.CONTINUOUS:
+                    }
+                    break;
+                case DomainTypes.CONTINUOUS:
+                    if (domain.optimise) {
                         randomInit[key] = this._boundRandom(domain.min, domain.max);
-                        break;
-                    case DomainTypes.BOOLEAN:
-                        randomInit[key] = Math.random() < 0.5;
-                        break;
-                    case DomainTypes.CATEGORICAL:
-                        if (domain.categories) {
-                            randomInit[key] = domain.categories[Math.floor(Math.random() * domain.categories.length)];
-                        } else {
-                            throw new Error(`The parameter ${key} is categorical but has no categories defined`);
+                    }
+                    break;
+                case DomainTypes.BOOLEAN:
+                    randomInit[key] = Math.random() < 0.5;
+                    break;
+                case DomainTypes.CATEGORICAL:
+                    if (domain.optimise) {
+                        if (!domain.categories || domain.categories.length === 0) {
+                            throw new Error(`Parameter ${key} is categorical but has no categories defined`);
                         }
-                        break;
+                        randomInit[key] = domain.categories[Math.floor(Math.random() * domain.categories.length)];
+                    }
+                    break;
+            }
+        }
+
+        return flatten.unflatten(randomInit);
+    }
+
+    protected _validateConfiguratorParamData(
+        parameters: GradientAscentParameters,
+        configuratorParamData: C1ConfiguratorParamData
+    ): void {
+        const parameterDomains = this._getParameterDomains(parameters);
+        const configFlat = flatten(configuratorParamData);
+
+        for (const [key, domain] of Object.entries(parameterDomains)) {
+            if (!domain.optimise) continue;
+
+            if ((domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) && domain.optimise) {
+                const value = configFlat[key];
+                if (typeof value !== 'number' || value < domain.min || value > domain.max) {
+                    throw new Error(`Parameter ${key} value ${value} is out of range [${domain.min}, ${domain.max}]`);
                 }
             }
         }
-        return flatten.unflatten(randomInit);
     }
 }
