@@ -27,8 +27,8 @@ export function runSimulationTest(description: string, simConfig: SimulationConf
         });
 
         it("does not initialise a broken simconfig", () => {
-            expect(() => C1.createSimulation({} as SimConfigDTO, logger, new RandomStreamFactory())).toThrowError();
-            expect(() => C1.createSimulation(brokenC1SimulationConfig as SimConfigDTO, logger, new RandomStreamFactory())).toThrowError();
+            expect(() => C1.createSimulation({} as SimConfigDTO, logger, new RandomStreamFactory())).toThrow();
+            expect(() => C1.createSimulation(brokenC1SimulationConfig as SimConfigDTO, logger, new RandomStreamFactory())).toThrow();
         })
 
         it("runs the simulation without control step", async () => {
