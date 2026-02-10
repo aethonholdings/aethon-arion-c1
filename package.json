@@ -1,6 +1,6 @@
 {
   "name": "aethon-arion-c1",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "The Arion C1 model and pipeline class implementations",
   "repository": "github:aethonholdings/aethon-arion-c1",
   "main": "dist/index.js",
@@ -11,12 +11,13 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "watch": "tsc -w & nodemon -q -w dist dist/index.js"
+    "watch": "tsc -w & nodemon -q -w dist dist/index.js",
+    "document": "npx typedoc src/index.ts"
   },
   "author": "Konstantinos Dimitriou",
   "license": "MIT",
   "dependencies": {
-    "aethon-arion-pipeline": "^0.5.1",
+    "aethon-arion-pipeline": "^0.5.2",
     "flat": "^5.0.2",
     "rxjs": "~7.8.1"
   },
