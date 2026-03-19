@@ -996,7 +996,17 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             throw new Error("Bound step can only be performed on numerical parameters");
         }
 
-        let value = x + slope * parameters.iterations.learningRate;
+        let step = slope * parameters.iterations.learningRate;
+
+        // Clamp step magnitude to a fraction of the parameter range to prevent overshooting
+        if (domain.optimise) {
+            const range = domain.max - domain.min;
+            const fraction = parameters.iterations.maxStepFraction ?? 0.05;
+            const maxStep = fraction * range;
+            step = Math.max(-maxStep, Math.min(maxStep, step));
+        }
+
+        let value = x + step;
 
         // Round if discrete
         if (domain.type === DomainTypes.DISCRETE) {

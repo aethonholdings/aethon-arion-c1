@@ -453,7 +453,8 @@ describe('C1GradientAscentOptimiser', () => {
                 ],
                 iterations: {
                     tolerance: 0.01,
-                    learningRate: 1.0, // Large learning rate for testing
+                    learningRate: 1.0,
+                    maxStepFraction: 0.5, // Allow up to 50% of range per step
                     max: 100
                 }
             };
