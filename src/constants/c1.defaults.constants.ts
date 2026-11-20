@@ -9,7 +9,8 @@ export const C1BaseConfiguratorDefaultData: Readonly<C1ConfiguratorParamData> = 
     gains: {
         influence: 0.00001,
         judgment: 0.00001,
-        incentive: 0.00000001
+        // per second, applied to the relative incentive gap (fraction of target); comparable to the judgment gain
+        incentive: 0.00001
     },
     actionStateProbability: 0.85,
     graph: "teams",

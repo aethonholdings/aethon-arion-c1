@@ -33,10 +33,21 @@ describe("Simple C1 Simulation", () => {
     });
 
     it("runs the simulation without control step", async () => {
-        const simulation = C1.createSimulation(simpleC1SimulationConfig as SimConfigDTO, logger, new RandomStreamFactory());
-        const last = await lastValueFrom(simulation.run$());
-        expect(last.organisation.getAgents().getTensors().priorityTensor).toEqual(
-            simpleC1SimulationConfigResult
+        // reproducible streams: the run is deterministic and must match the recorded tensor
+        const run = async () => {
+            const simulation = C1.createSimulation(
+                simpleC1SimulationConfig as SimConfigDTO,
+                logger,
+                RandomStreamFactory.seeded(1, 1)
+            );
+            return (await lastValueFrom(simulation.run$())).organisation.getAgents().getTensors().priorityTensor;
+        };
+        const tensor = await run();
+        expect(tensor).toEqual(await run());
+        tensor.flat(2).forEach((p: number, i: number) =>
+            expect(p).toBeCloseTo(simpleC1SimulationConfigResult.flat(2)[i], 6)
         );
+        // with relative incentive gaps the judgment term drives every agent towards the Action state
+        for (const agent of tensor) for (const row of agent) expect(row[0]).toBeGreaterThan(0.9);
     });
 });

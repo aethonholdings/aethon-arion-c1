@@ -160,3 +160,28 @@ describe("C1 board and KPI fixes", () => {
         expect(JSON.stringify(sc)).toBe(before);
     });
 });
+
+describe("C1 seeded configurator (common random numbers)", () => {
+    const configurator = C1.getConfigurator(C1ConfiguratorNames.BASE);
+    const params = (data: any) => ({
+        modelName: "C1",
+        configuratorName: C1ConfiguratorNames.BASE,
+        multipleOrgConfigs: true,
+        data: { ...c1DefaultConfiguratorParamData(), spans: 2, layers: 2, ...data }
+    });
+
+    it("reproduces an org config from its seed", () => {
+        expect(configurator.generate(params({}), 42).agentSet).toEqual(configurator.generate(params({}), 42).agentSet);
+        expect(configurator.generate(params({}), 42).agentSet).not.toEqual(configurator.generate(params({}), 43).agentSet);
+    });
+
+    it("shares the random draws between neighbouring optimiser points", () => {
+        // a gain perturbation only rescales the same draws
+        const a = configurator.generate(params({ gains: { influence: 1e-5, judgment: 1e-5, incentive: 1e-5 } }), 7);
+        const b = configurator.generate(params({ gains: { influence: 1e-5, judgment: 2e-5, incentive: 1e-5 } }), 7);
+        const ja = a.agentSet.judgmentTensor.flat(3);
+        const jb = b.agentSet.judgmentTensor.flat(3);
+        jb.forEach((v: number, i: number) => expect(v).toBeCloseTo(2 * ja[i], 15));
+        expect(b.agentSet.incentiveTensor).toEqual(a.agentSet.incentiveTensor);
+    });
+});

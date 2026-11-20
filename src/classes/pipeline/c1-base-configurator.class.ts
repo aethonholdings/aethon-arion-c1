@@ -4,6 +4,7 @@ import {
     Configurator,
     OrgConfigDTO,
     ConfiguratorParamsDTO,
+    StaticRandomStream
 } from "aethon-arion-pipeline";
 import {
     C1AgentStateIndex,
@@ -299,7 +300,7 @@ export class C1BaseConfigurator extends Configurator<
      *
      * @throws {Error} Implicitly throws if tensor dimensions are inconsistent
      */
-    generate(params: ConfiguratorParamsDTO<C1ConfiguratorParamData>): OrgConfigDTO {
+    generate(params: ConfiguratorParamsDTO<C1ConfiguratorParamData>, randomSeed?: number): OrgConfigDTO {
         if (!Number.isInteger(params.data.spans) || params.data.spans < 1) {
             throw new Error(`spans must be an integer of at least 1 (got ${params.data.spans})`);
         }
@@ -369,7 +370,10 @@ export class C1BaseConfigurator extends Configurator<
         //   hybrid:     purposeful + hybridNoise * g * (2U - 1), i.e. the purposeful kernel with noise
         // Influence entries are only set between agents connected in the org graph.
         const hybridNoise: number = params.data.hybridNoise ?? 0.5;
-        const uniform = (gain: number, amplitude: number = 1) => amplitude * gain * (2 * Math.random() - 1);
+        // seeded draws when a seed is given (reproducible org configs, common random numbers across optimiser points)
+        const stream = randomSeed !== undefined ? new StaticRandomStream(randomSeed) : null;
+        const random = (): number => (stream ? stream.next() : Math.random());
+        const uniform = (gain: number, amplitude: number = 1) => amplitude * gain * (2 * random() - 1);
         const init = params.data.matrixInit;
         const gains = params.data.gains;
 

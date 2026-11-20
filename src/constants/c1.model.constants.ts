@@ -140,7 +140,7 @@ export { C1BaseConfiguratorDefaultData } from "./c1.defaults.constants";
 
 // version of the C1 model implementation; bump whenever a change alters simulation outputs. Version 2: priority
 // updates without 4-decimal rounding and with an epsilon floor (core 0.3), corrected control-step revenue target,
-// hybrid initialisation with noise
+// hybrid initialisation with noise, incentive gaps relative to the target (core 0.3)
 export const C1ModelVersion: string = "2";
 
 // The C1 model
