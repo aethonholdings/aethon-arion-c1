@@ -12,22 +12,54 @@ const params = (overrides: Partial<C1ConfiguratorParamData>): ConfiguratorParams
 });
 
 describe("C1BaseConfigurator", () => {
-    it("applies the purposeful judgment kernel when judgment init is hybrid", () => {
+    it("adds bounded noise to the purposeful kernels when init is hybrid", () => {
         const g = 0.5;
-        const orgConfig = configurator.generate(
-            params({
-                spans: 2,
-                layers: 2,
-                gains: { influence: 0, judgment: g, incentive: 0 },
-                matrixInit: { influence: "null", judgment: "hybrid", incentive: "null" }
-            })
-        );
-        for (const agentKernel of orgConfig.agentSet.judgmentTensor) {
-            expect(agentKernel).toEqual([
-                [[-g], [g]],
-                [[-g], [g]]
-            ]);
+        const noise = 0.5;
+        const make = () =>
+            configurator.generate(
+                params({
+                    spans: 2,
+                    layers: 2,
+                    gains: { influence: g, judgment: g, incentive: g },
+                    matrixInit: { influence: "hybrid", judgment: "hybrid", incentive: "hybrid" },
+                    hybridNoise: noise
+                })
+            );
+        const a = make();
+        const b = make();
+        const purposefulJudgment = [
+            [[-g], [g]],
+            [[-g], [g]]
+        ];
+        for (let alpha = 0; alpha < a.agentCount; alpha++) {
+            for (let sigma = 0; sigma < 2; sigma++) {
+                for (let tau = 0; tau < 2; tau++) {
+                    const j = a.agentSet.judgmentTensor[alpha][sigma][tau][0];
+                    expect(Math.abs(j - purposefulJudgment[sigma][tau][0])).toBeLessThanOrEqual(noise * g);
+                    // incentive noise covers every reporting dimension, the purposeful part only revenue
+                    expect(a.agentSet.incentiveTensor[alpha][sigma][tau].length).toBe(8);
+                }
+            }
         }
+        expect(a.agentSet.judgmentTensor).not.toEqual(
+            Array.from({ length: a.agentCount }, () => purposefulJudgment)
+        );
+        expect(a.agentSet.judgmentTensor).not.toEqual(b.agentSet.judgmentTensor);
+        // no influence between agents that are not connected in the org graph
+        const graph = (a.plant as any).graph;
+        expect(a.agentSet.influenceTensor[1][2][0][0] === 0).toBe(graph[1][2] === 0);
+    });
+
+    it("rejects spans or layers below 1", () => {
+        expect(() => configurator.generate(params({ spans: 0, layers: 3 }))).toThrow();
+        expect(() => configurator.generate(params({ spans: 2, layers: 0 }))).toThrow();
+        expect(() => configurator.generate(params({ spans: 2.5, layers: 2 }))).toThrow();
+    });
+
+    it("does not share the defaults with callers", () => {
+        const defaults = configurator.getDefaultParams();
+        defaults.data.spans = 99;
+        expect(configurator.getDefaultParams().data.spans).toBe(C1BaseConfiguratorDefaultData.spans);
     });
 
     it("does not apply the purposeful judgment kernel when only influence init is hybrid", () => {

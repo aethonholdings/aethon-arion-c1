@@ -11,6 +11,7 @@ import {
     C1AgentStatesArray,
     C1PlantStateVariables,
     C1PlantStateVariablesIndex,
+    C1PlantStateTarget,
     C1ReportingVariables,
     C1ReportingVariablesIndex,
     KPIFactoryIndex
@@ -312,18 +313,21 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<
                     plan: plan[C1ReportingVariablesIndex.PAYROLL]
                 });
                 variables.set("Operating profit", {
-                    name: "Gross profit",
+                    name: "Operating profit",
                     actual: reporting[C1ReportingVariablesIndex.REVENUE] - reporting[C1ReportingVariablesIndex.PAYROLL],
                     plan: plan[C1ReportingVariablesIndex.REVENUE] - plan[C1ReportingVariablesIndex.PAYROLL]
                 });
                 variables.set("Sales volume", {
                     name: "Sales volume",
-                    actual:
-                        (variables.get(C1ReportingVariables.REVENUE)?.actual ?? 0) /
-                        reporting[C1ReportingVariablesIndex.UNIT_PRICE],
-                    plan:
-                        (variables.get(C1ReportingVariables.REVENUE)?.plan ?? 0) /
+                    // volume is undefined (0/0) at a zero unit price; report 0 rather than NaN
+                    actual: safeDivide(
+                        variables.get(C1ReportingVariables.REVENUE)?.actual ?? 0,
+                        reporting[C1ReportingVariablesIndex.UNIT_PRICE]
+                    ),
+                    plan: safeDivide(
+                        variables.get(C1ReportingVariables.REVENUE)?.plan ?? 0,
                         plan[C1ReportingVariablesIndex.UNIT_PRICE]
+                    )
                 });
                 variables.set(C1ReportingVariables.UNIT_PRICE, {
                     name: C1ReportingVariables.UNIT_PRICE,
@@ -345,11 +349,6 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<
                     actual: reporting[C1ReportingVariablesIndex.CLOCK_TICKS],
                     plan: plan[C1ReportingVariablesIndex.CLOCK_TICKS]
                 });
-                variables.set("Seconds per work month", {
-                    name: "Seconds per work month",
-                    actual: 20 * 8 * 3600,
-                    plan: 20 * 8 * 3600
-                });
                 variables.set("Clock tick seconds", {
                     name: "Clock tick seconds",
                     actual: reporting[C1ReportingVariablesIndex.CLOCK_TICK_SECONDS],
@@ -357,8 +356,10 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<
                 });
                 variables.set(C1PlantStateVariables.ACTION, {
                     name: C1PlantStateVariables.ACTION,
-                    actual: resultDTO.plant[C1PlantStateVariablesIndex.ACTION],
-                    plan: plant[C1PlantStateVariablesIndex.ACTION]
+                    actual: plant[C1PlantStateVariablesIndex.ACTION],
+                    // the plan is the board's final plant state target (the result's board vector carries only
+                    // the reporting plan); the final plan is always the target plan, also with a control step
+                    plan: C1PlantStateTarget[C1PlantStateVariablesIndex.ACTION]
                 });
                 variables.set("Revenue per agent", {
                     name: "Revenue per agent",
@@ -366,10 +367,10 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<
                     plan: agentCount > 0 ? plan[C1ReportingVariablesIndex.REVENUE] / agentCount : 0
                 });
 
-                // calculate the deltas
+                // calculate the deltas (in place: the entries are objects, so re-setting them is unnecessary and,
+                // with a key differing from the name, would add a duplicate entry during iteration)
                 variables.forEach((variable) => {
                     variable.delta = variable.actual - variable.plan;
-                    variables.set(variable.name, variable);
                 });
                 for (let alpha = 0; alpha < agentCount; alpha++) {
                     for (let sigma = 0; sigma < stateCount; sigma++) {
@@ -436,16 +437,6 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<
                         },
                         {
                             class: "",
-                            operator: "&#247;",
-                            data: variables.get("Seconds per work month")
-                        },
-                        {
-                            class: "",
-                            operator: "&#215;",
-                            data: variables.get("Clock tick seconds")
-                        },
-                        {
-                            class: "",
                             operator: "&#215;",
                             data: variables.get("Clock ticks")
                         },
@@ -480,11 +471,15 @@ export class C1PlanVsActualsReport extends PlanVsActualsKPIFactory<
                     proFormas: reports,
                     priorityTensor: { actual: actualPriorityTensor, plan: targetPriorityTensor, delta: deltaTensor }
                 } as PlanVsActualsKPIs);
-            } catch (error) {
-                throw new Error("Error in C1PlanVsActualsReport.generate");
+            } catch (error: any) {
+                throw new Error(`Error in C1PlanVsActualsReport.generate: ${error?.message ?? String(error)}`);
             }
         } else {
             throw new Error("Incomplete resultDTO; simConfig or orgConfig missing");
         }
     }
+}
+
+function safeDivide(numerator: number, denominator: number): number {
+    return denominator === 0 ? 0 : numerator / denominator;
 }

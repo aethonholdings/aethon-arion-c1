@@ -20,7 +20,7 @@ export class C1Board extends Board {
         this._stepExecuted = false;
         this._totalClockTicks = clockTicks;
         const targetFinancialsAfter = JSON.parse(JSON.stringify(reporting));
-        const targetPlantStateAfter: number[] = C1PlantStateTarget;
+        const targetPlantStateAfter: number[] = [...C1PlantStateTarget];
 
         // calculate the target revenue, payroll and net income after the step, if applicable
         targetFinancialsAfter[C1ReportingVariablesIndex.REVENUE] =
@@ -51,8 +51,20 @@ export class C1Board extends Board {
         };
         // calculate the target revenue, payroll and net income before the step, if applicable
         if (this._controlStep) {
+            // with a control step the board switches to the full plan once ceil(T/2) ticks have elapsed (see
+            // transitionState), so revenue can only accrue over the remaining T - ceil(T/2) ticks. The cumulative
+            // revenue target of the after-step plan must cover only that window, otherwise even a perfectly
+            // controllable organisation could reach at most half of it.
+            const ticksAfterStep: number = this._totalClockTicks - Math.ceil(this._totalClockTicks / 2);
+            targetFinancialsAfter[C1ReportingVariablesIndex.REVENUE] =
+                targetFinancialsAfter[C1ReportingVariablesIndex.HEADCOUNT] *
+                targetFinancialsAfter[C1ReportingVariablesIndex.UNIT_PRICE] *
+                ticksAfterStep;
+            targetFinancialsAfter[C1ReportingVariablesIndex.NET_INCOME] =
+                targetFinancialsAfter[C1ReportingVariablesIndex.REVENUE] -
+                targetFinancialsAfter[C1ReportingVariablesIndex.PAYROLL];
             const targetFinancialsBefore = JSON.parse(JSON.stringify(reporting));
-            const targetPlantStateBefore: number[] = C1PlantStateIdle;
+            const targetPlantStateBefore: number[] = [...C1PlantStateIdle];
             targetFinancialsBefore[C1ReportingVariablesIndex.REVENUE] = 0;
             targetFinancialsBefore[C1ReportingVariablesIndex.PAYROLL] =
                 targetFinancialsAfter[C1ReportingVariablesIndex.PAYROLL];

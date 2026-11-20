@@ -11,7 +11,8 @@ import {
     DomainTypes,
     SimSetDTO,
     States,
-    ConvergenceTestDTO
+    ConvergenceTestDTO,
+    ObjectHash
 } from 'aethon-arion-pipeline';
 import { C1ConfiguratorParamData } from '../src/interfaces/c1.interfaces';
 
@@ -54,7 +55,10 @@ describe('C1GradientAscentOptimiser', () => {
         // Using 'any' to bypass TypeScript checking since we're testing optimizer in isolation
         mockModel = {
             name: 'C1',
-            index: 0
+            index: 0,
+            version: '2',
+            hashConfiguratorParams: (configuratorName: string, data: any) =>
+                new ObjectHash({ modelName: 'C1', modelVersion: '2', configuratorName, data }).toString()
         };
 
         optimizer = new C1GradientAscentOptimiser(mockModel);

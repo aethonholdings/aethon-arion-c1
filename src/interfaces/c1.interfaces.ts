@@ -22,6 +22,7 @@ export interface C1ConfiguratorParamData extends ConfiguratorParamData {
         judgment: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
         incentive: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
     };
+    hybridNoise?: number; // for "hybrid" initialisation: amplitude of the uniform noise added to the purposeful kernel, as a fraction of the gain (default 0.5)
     board: C1BoardConfig; // defines whether the Board will change the targets halfway through the simulation to zero to test controllability
     reporting: C1ReportingConfig; // defines the unit payroll and unit price for the reporting
 }

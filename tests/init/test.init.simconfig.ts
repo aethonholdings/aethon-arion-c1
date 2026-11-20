@@ -119,12 +119,12 @@ export const simpleC1SimulationConfig: SimulationConfig = {
 
 export const simpleC1SimulationConfigResult: number[][][] = [
     [
-        [1, 0],
-        [0, 1]
+        [0.000001, 0.999999],
+        [0.000001, 0.999999]
     ],
     [
-        [0, 1],
-        [1, 0]
+        [0.000001, 0.999999],
+        [0.000001, 0.999999]
     ]
 ];
 

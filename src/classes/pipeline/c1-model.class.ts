@@ -9,6 +9,7 @@ import {
 import {
     C1ModelIndex,
     C1ModelName,
+    C1ModelVersion,
     C1ReportingVariablesIndex
 } from "../../constants/c1.model.constants";
 import { C1Organisation } from "../core/c1-organisation.class";
@@ -19,7 +20,7 @@ import { C1GradientAscentOptimiser } from "../optimisers/c1-gradient-ascent.opti
 export class C1Model extends Model {
     constructor() {
         // this casting is required in order to bypass a compiler error with type checking
-        super(C1ModelName, C1ModelIndex);
+        super(C1ModelName, C1ModelIndex, C1ModelVersion);
         this._configurators.push(new C1BaseConfigurator(this));
         this._kpiFactories.push(new C1PlanVsActualsReport(this));
         this._optimisers.push(new C1GradientAscentOptimiser(this));

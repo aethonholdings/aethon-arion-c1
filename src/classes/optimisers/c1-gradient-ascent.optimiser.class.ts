@@ -1,4 +1,5 @@
 import { C1ConfiguratorNames, C1MatrixInitTypes, C1OptimiserNames } from "../../constants/c1.model.constants";
+import { c1DefaultConfiguratorParamData } from "../../constants/c1.defaults.constants";
 import { C1ConfiguratorParamData } from "../../interfaces/c1.interfaces";
 import {
     GradientAscentOptimiser,
@@ -573,9 +574,16 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         simSetDTO: SimSetDTO
     ): OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>> {
         // Generate initial x point (random or defined)
-        const initialConfig = parameters.init.type === "random"
-            ? this._getRandomInit(parameters)
-            : parameters.init.config;
+        const errors = this.validateParameters(parameters);
+        if (errors.length > 0) {
+            throw new Error(`Invalid optimiser parameters: ${errors.join("; ")}`);
+        }
+        // parameters not covered by the parameter space or the defined config fall back to the defaults, so that
+        // every configurator field the configurator and _createDataPoint need is present
+        const initialConfig = this._withDefaults(
+            parameters.init.type === "random" ? this._getRandomInit(parameters) : parameters.init.config
+        );
+        this._validateConfiguratorParamData(parameters, initialConfig);
 
         const xDataPoint = this._createDataPoint("x", initialConfig);
         const gradientPoints = this._generateGradientPoints(parameters, xDataPoint);
@@ -644,6 +652,9 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             const currentValue = xConfigFlat[parameterId];
 
             if (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) {
+                // a zero-width domain is a fixed parameter: no derivative can be taken (the step would be 0 and the
+                // slope 0/0 = NaN)
+                if (domain.min === domain.max) continue;
                 const point = this._createNumericalGradientPoint(parameterId, currentValue, domain, xConfigFlat);
                 gradientPoints.push(point);
             } else if (domain.type === DomainTypes.BOOLEAN) {
@@ -679,7 +690,14 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             stepSize = -Math.min(domain.derivativeStepSize, currentValue - domain.min);
         }
 
-        const perturbedValue = currentValue + stepSize;
+        let perturbedValue = currentValue + stepSize;
+        if (domain.type === DomainTypes.DISCRETE) {
+            // discrete parameters are perturbed to a neighbouring integer inside the domain
+            perturbedValue = Math.round(perturbedValue);
+            if (perturbedValue === currentValue) perturbedValue = currentValue + (currentValue < domain.max ? 1 : -1);
+            perturbedValue = Math.max(domain.min, Math.min(domain.max, perturbedValue));
+            stepSize = perturbedValue - currentValue;
+        }
         const perturbedConfigFlat = { ...xConfigFlat, [parameterId]: perturbedValue };
         const perturbedConfig = flatten.unflatten(perturbedConfigFlat);
 
@@ -1003,20 +1021,27 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         }
 
         let step = slope * parameters.iterations.learningRate;
+        if (!Number.isFinite(step)) step = 0;
+        const fraction = parameters.iterations.maxStepFraction ?? 0.05;
 
-        // Clamp step magnitude to a fraction of the parameter range to prevent overshooting
-        if (domain.optimise) {
-            const range = domain.max - domain.min;
-            const fraction = parameters.iterations.maxStepFraction ?? 0.05;
-            const maxStep = fraction * range;
-            step = Math.max(-maxStep, Math.min(maxStep, step));
-        }
-
-        let value = x + step;
-
-        // Round if discrete
+        let value: number;
         if (domain.type === DomainTypes.DISCRETE) {
-            value = Math.round(value);
+            // a discrete parameter moves by at least one unit whenever the gradient is non-zero; otherwise a
+            // step capped at fraction * range < 0.5 would always round back to x and the parameter could never move
+            // (loop detection on the server stops any resulting oscillation)
+            if (step !== 0) {
+                const range = domain.optimise ? domain.max - domain.min : Infinity;
+                const maxStep = Math.max(1, Math.floor(fraction * range));
+                step = Math.sign(step) * Math.min(maxStep, Math.max(1, Math.round(Math.abs(step))));
+            }
+            value = Math.round(x) + step;
+        } else {
+            // Clamp step magnitude to a fraction of the parameter range to prevent overshooting
+            if (domain.optimise) {
+                const maxStep = fraction * (domain.max - domain.min);
+                step = Math.max(-maxStep, Math.min(maxStep, step));
+            }
+            value = x + step;
         }
 
         // Apply bounds (type guard ensures min/max exist)
@@ -1041,6 +1066,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             data: {
                 inputs: {
                     modelName: this._model.name,
+                    modelVersion: this._model.version,
                     configuratorName: this._configuratorName,
                     multipleOrgConfigs:
                         configParams.matrixInit.incentive === C1MatrixInitTypes.RANDOM ||
@@ -1050,12 +1076,37 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
                         configParams.matrixInit.influence === C1MatrixInitTypes.HYBRID ||
                         configParams.matrixInit.incentive === C1MatrixInitTypes.HYBRID,
                     data: configParams,
-                    hash: new ObjectHash(configParams).toString()
+                    hash: this._model.hashConfiguratorParams(this._configuratorName, configParams)
                 },
                 outputs: outputs
             },
             status: States.PENDING
         };
+    }
+
+    /**
+     * Validates the optimiser parameters, including the C1-specific constraint that the org chart dimensions
+     * (spans, layers) are positive integers.
+     */
+    validateParameters(parameters: GradientAscentParameters): string[] {
+        const errors: string[] = super.validateParameters(parameters);
+        for (const { id, domain } of parameters?.parameterSpace ?? []) {
+            if (id !== "spans" && id !== "layers") continue;
+            if (domain.type !== DomainTypes.DISCRETE) {
+                errors.push(`${id}: must be a discrete domain`);
+            } else if (domain.optimise ? domain.min < 1 : !(Number.isInteger(domain.default) && domain.default >= 1)) {
+                errors.push(`${id}: must be an integer of at least 1`);
+            }
+        }
+        return errors;
+    }
+
+    /** Overlays a (possibly partial) configurator config on a copy of the C1 defaults. */
+    private _withDefaults(config: Partial<C1ConfiguratorParamData>): C1ConfiguratorParamData {
+        return flatten.unflatten({
+            ...flatten(c1DefaultConfiguratorParamData()),
+            ...flatten(JSON.parse(JSON.stringify(config ?? {})))
+        });
     }
 
     private _getRandomInit(parameters: GradientAscentParameters): C1ConfiguratorParamData {

@@ -136,29 +136,12 @@ export enum KPIFactoryIndex {
 }
 
 // CONFIGURATORS --------------------------------
-export const C1BaseConfiguratorDefaultData: C1ConfiguratorParamData = {
-    spans: 1,
-    layers: 1,
-    gains: {
-        influence: 0.00001,
-        judgment: 0.00001,
-        incentive: 0.00000001
-    },
-    actionStateProbability: 0.85,
-    graph: "teams",
-    matrixInit: {
-        influence: "random",
-        judgment: "random",
-        incentive: "random"
-    },
-    reporting: {
-        unitPayroll: 1,
-        unitPrice: 1
-    },
-    board: {
-        controlStep: false
-    }
-};
+export { C1BaseConfiguratorDefaultData } from "./c1.defaults.constants";
+
+// version of the C1 model implementation; bump whenever a change alters simulation outputs. Version 2: priority
+// updates without 4-decimal rounding and with an epsilon floor (core 0.3), corrected control-step revenue target,
+// hybrid initialisation with noise
+export const C1ModelVersion: string = "2";
 
 // The C1 model
 export const C1: C1Model = new C1Model();

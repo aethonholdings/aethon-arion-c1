@@ -8,7 +8,6 @@ import {
 import {
     C1AgentStateIndex,
     C1AgentStatesArray,
-    C1BaseConfiguratorDefaultData,
     C1ConfiguratorNames,
     C1ModelClockTickSeconds,
     C1ModelName,
@@ -22,6 +21,7 @@ import {
     C1ReportingConfig
 } from "../../interfaces/c1.interfaces";
 import { C1Model } from "../pipeline/c1-model.class";
+import { C1BaseConfiguratorDefaultData, c1DefaultConfiguratorParamData } from "../../constants/c1.defaults.constants";
 
 /**
  * Base configurator for the C1 organizational coordination model.
@@ -300,6 +300,14 @@ export class C1BaseConfigurator extends Configurator<
      * @throws {Error} Implicitly throws if tensor dimensions are inconsistent
      */
     generate(params: ConfiguratorParamsDTO<C1ConfiguratorParamData>): OrgConfigDTO {
+        if (!Number.isInteger(params.data.spans) || params.data.spans < 1) {
+            throw new Error(`spans must be an integer of at least 1 (got ${params.data.spans})`);
+        }
+        if (!Number.isInteger(params.data.layers) || params.data.layers < 1) {
+            throw new Error(`layers must be an integer of at least 1 (got ${params.data.layers})`);
+        }
+        // the generated config keeps its own copy of the parameters
+        params = JSON.parse(JSON.stringify(params));
         let agentCount: number;
         params.data.spans > 1
             ? (agentCount = (params.data.spans ** params.data.layers - 1) / (params.data.spans - 1))
@@ -354,59 +362,51 @@ export class C1BaseConfigurator extends Configurator<
             }
         }
 
-        // for random and hybrid initialisation, replace the zeroes in the initialised matrices
-        if (params.data.matrixInit.judgment === "random" || params.data.matrixInit.judgment === "hybrid")
-            agentSetTensors.judgmentTensor = Utils.tensor(
-                [agentCount, this.stateCount, this.stateCount, this.plantDegreesOfFreedom],
-                () => {
-                    return (2 * Math.random() - 1) * params.data.gains.judgment;
-                }
-            ) as number[][][][];
-        if (params.data.matrixInit.incentive === "random" || params.data.matrixInit.incentive === "hybrid")
-            agentSetTensors.incentiveTensor = Utils.tensor(
-                [agentCount, this.stateCount, this.stateCount, this.reportingDegreesOfFreedom],
-                () => {
-                    return (2 * Math.random() - 1) * params.data.gains.incentive;
-                }
-            ) as number[][][][];
-
-        // for purposeful and hybrid matrix initialisers, set up the parameters based on gains
-        for (let sigma = 0; sigma < this.stateCount; sigma++) {
-            for (let tau = 0; tau < this.stateCount; tau++) {
-                for (let alpha = 0; alpha < agentCount; alpha++) {
-                    for (let beta = 0; beta < agentCount; beta++) {
-                        if (
-                            params.data.matrixInit.influence === "purposeful" ||
-                            params.data.matrixInit.influence === "hybrid"
-                        )
-                            agentSetTensors.influenceTensor[alpha][beta][sigma][tau] =
-                                -params.data.gains.influence * graph[alpha][beta];
-                        if (params.data.matrixInit.influence === "random")
-                            agentSetTensors.influenceTensor[alpha][beta][sigma][tau] =
-                                params.data.gains.influence * graph[alpha][beta] * (2 * Math.random() - 1);
-                    }
-                    for (let gamma = 0; gamma < this.stateCount; gamma++) {
-                        if (
-                            params.data.matrixInit.incentive === "purposeful" ||
-                            params.data.matrixInit.incentive === "hybrid"
-                        ) {
-                            if (tau === C1AgentStateIndex.ACTION && gamma === C1ReportingVariablesIndex.REVENUE)
-                                agentSetTensors.incentiveTensor[alpha][sigma][tau][gamma] =
-                                    -params.data.gains.incentive;
-                            if (tau === C1AgentStateIndex.SELF && gamma === C1ReportingVariablesIndex.REVENUE)
-                                agentSetTensors.incentiveTensor[alpha][sigma][tau][gamma] = params.data.gains.incentive;
-                        }
-                    }
-                }
-            }
-        }
+        // Kernel initialisation per tensor (gain g = params.data.gains.<tensor>, U ~ uniform[0, 1)):
+        //   null:       0
+        //   random:     g * (2U - 1)
+        //   purposeful: a kernel driving agents to the Action state (sign conventions below)
+        //   hybrid:     purposeful + hybridNoise * g * (2U - 1), i.e. the purposeful kernel with noise
+        // Influence entries are only set between agents connected in the org graph.
+        const hybridNoise: number = params.data.hybridNoise ?? 0.5;
+        const uniform = (gain: number, amplitude: number = 1) => amplitude * gain * (2 * Math.random() - 1);
+        const init = params.data.matrixInit;
+        const gains = params.data.gains;
 
         for (let alpha = 0; alpha < agentCount; alpha++) {
-            if (params.data.matrixInit.judgment === "purposeful" || params.data.matrixInit.judgment === "hybrid") {
-                agentSetTensors.judgmentTensor[alpha] = [
-                    [[-params.data.gains.judgment], [params.data.gains.judgment]],
-                    [[-params.data.gains.judgment], [params.data.gains.judgment]]
-                ];
+            for (let sigma = 0; sigma < this.stateCount; sigma++) {
+                for (let tau = 0; tau < this.stateCount; tau++) {
+                    // influence: purposeful kernel -g couples an agent's priorities to its graph neighbours'
+                    for (let beta = 0; beta < agentCount; beta++) {
+                        let value = 0;
+                        if (init.influence === "random") value = uniform(gains.influence);
+                        if (init.influence === "purposeful") value = -gains.influence;
+                        if (init.influence === "hybrid") value = -gains.influence + uniform(gains.influence, hybridNoise);
+                        agentSetTensors.influenceTensor[alpha][beta][sigma][tau] = value * graph[alpha][beta];
+                    }
+                    // judgment: purposeful kernel -g towards Action, +g towards Self, per plant variable
+                    for (let chi = 0; chi < this.plantDegreesOfFreedom; chi++) {
+                        const purposeful = tau === C1AgentStateIndex.ACTION ? -gains.judgment : gains.judgment;
+                        let value = 0;
+                        if (init.judgment === "random") value = uniform(gains.judgment);
+                        if (init.judgment === "purposeful") value = purposeful;
+                        if (init.judgment === "hybrid") value = purposeful + uniform(gains.judgment, hybridNoise);
+                        agentSetTensors.judgmentTensor[alpha][sigma][tau][chi] = value;
+                    }
+                    // incentive: purposeful kernel -g towards Action, +g towards Self on revenue only. The loop runs
+                    // over the reporting dimensions (psi), not the agent states.
+                    for (let psi = 0; psi < this.reportingDegreesOfFreedom; psi++) {
+                        let purposeful = 0;
+                        if (psi === C1ReportingVariablesIndex.REVENUE) {
+                            purposeful = tau === C1AgentStateIndex.ACTION ? -gains.incentive : gains.incentive;
+                        }
+                        let value = 0;
+                        if (init.incentive === "random") value = uniform(gains.incentive);
+                        if (init.incentive === "purposeful") value = purposeful;
+                        if (init.incentive === "hybrid") value = purposeful + uniform(gains.incentive, hybridNoise);
+                        agentSetTensors.incentiveTensor[alpha][sigma][tau][psi] = value;
+                    }
+                }
             }
         }
 
@@ -517,7 +517,7 @@ export class C1BaseConfigurator extends Configurator<
             modelName: C1ModelName,
             configuratorName: C1ConfiguratorNames.BASE,
             multipleOrgConfigs: true,
-            data: C1BaseConfiguratorDefaultData
+            data: c1DefaultConfiguratorParamData()
         };
     }
 }
