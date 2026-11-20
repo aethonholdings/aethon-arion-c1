@@ -402,7 +402,7 @@ export class C1BaseConfigurator extends Configurator<
         }
 
         for (let alpha = 0; alpha < agentCount; alpha++) {
-            if (params.data.matrixInit.judgment === "purposeful" || params.data.matrixInit.influence === "hybrid") {
+            if (params.data.matrixInit.judgment === "purposeful" || params.data.matrixInit.judgment === "hybrid") {
                 agentSetTensors.judgmentTensor[alpha] = [
                     [[-params.data.gains.judgment], [params.data.gains.judgment]],
                     [[-params.data.gains.judgment], [params.data.gains.judgment]]
@@ -435,8 +435,8 @@ export class C1BaseConfigurator extends Configurator<
         } as C1PlantConfig;
         configDTO.configuratorParams = params;
         configDTO.reporting = {
-            unitPrice: 1,
-            unitPayroll: 1
+            unitPrice: params.data.reporting?.unitPrice ?? C1BaseConfiguratorDefaultData.reporting.unitPrice,
+            unitPayroll: params.data.reporting?.unitPayroll ?? C1BaseConfiguratorDefaultData.reporting.unitPayroll
         } as C1ReportingConfig;
         configDTO.agentCount = agentCount;
         configDTO.agentSet = agentSetTensors;

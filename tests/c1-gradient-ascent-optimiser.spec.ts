@@ -664,4 +664,57 @@ describe('C1GradientAscentOptimiser', () => {
             expect(updatedState.optimiserData.moduloDel).toBe(10);
         });
     });
+
+    describe('Convergence at domain bounds', () => {
+        const boundParameters = (initSpans: number): GradientAscentParameters => ({
+            init: {
+                type: 'defined',
+                config: {
+                    spans: initSpans, layers: 1,
+                    gains: { influence: 0.000001, judgment: 0.00001, incentive: 0.00000001 },
+                    graph: 'teams', actionStateProbability: 0.85,
+                    matrixInit: { influence: 'null', judgment: 'random', incentive: 'purposeful' },
+                    board: { controlStep: false },
+                    reporting: { unitPrice: 1, unitPayroll: 1 }
+                }
+            },
+            parameterSpace: createCompleteParameterSpace([
+                {
+                    id: 'spans',
+                    domain: { type: DomainTypes.DISCRETE, optimise: true, min: 1, max: 5, derivativeStepSize: 1 }
+                }
+            ]),
+            iterations: { tolerance: 0.01, learningRate: 0.1, max: 100 }
+        });
+
+        const runUpdate = (initSpans: number, xPerf: number, gradPerf: number) => {
+            const parameters = boundParameters(initSpans);
+            const state = optimizer.initialise(parameters, simSetDTO);
+            const results: ConvergenceTestDTO[] = state.optimiserData.dataPoints.map((dp, i) =>
+                createMockResult(i, States.COMPLETED, dp.id === 'x' ? xPerf : gradPerf, dp.data.inputs)
+            );
+            return optimizer.update(parameters, state, results);
+        };
+
+        it('treats a parameter at the minimum with a negative slope as converged', () => {
+            // x = 1 (min), x + delta = 2 performs worse: slope < 0 points out of the domain
+            const updated = runUpdate(1, 100, 50);
+            expect(updated.optimiserData.moduloDel).toBe(0);
+            expect(updated.converged).toBe(true);
+        });
+
+        it('treats a parameter at the maximum with a positive slope as converged', () => {
+            // x = 5 (max), x - delta = 4 performs worse: slope > 0 points out of the domain
+            const updated = runUpdate(5, 100, 50);
+            expect(updated.optimiserData.moduloDel).toBe(0);
+            expect(updated.converged).toBe(true);
+        });
+
+        it('does not treat a parameter at the minimum with a positive slope as converged', () => {
+            const updated = runUpdate(1, 100, 150);
+            expect(updated.optimiserData.moduloDel).toBe(50);
+            expect(updated.converged).toBe(false);
+        });
+    });
+
 });

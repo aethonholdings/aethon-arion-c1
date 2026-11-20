@@ -949,7 +949,13 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
 
                 // Only contribute to gradient if not at max boundary with positive slope
                 // (if at max and slope is positive, we can't ascend further)
-                if (!(x === domain.max && slope > 0)) {
+                // a parameter pinned at a bound with the gradient pointing out of the feasible domain cannot
+                // move further, so it does not count against convergence (projected gradient)
+                // x is reconstructed as xPlusDelta - xDelta, so compare against the bounds with a tolerance
+                const boundTolerance = 1e-9 * Math.max(1, Math.abs(domain.max - domain.min));
+                const pinnedAtMax = x >= domain.max - boundTolerance && slope > 0;
+                const pinnedAtMin = x <= domain.min + boundTolerance && slope < 0;
+                if (!pinnedAtMax && !pinnedAtMin) {
                     moduloSquared += slope ** 2;
                 }
             } else if (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) {
