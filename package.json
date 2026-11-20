@@ -17,7 +17,8 @@
     "author": "Konstantinos Dimitriou",
     "license": "MIT",
     "dependencies": {
-        "aethon-arion-pipeline": "^0.6.0"
+        "aethon-arion-pipeline": "^0.6.0",
+        "ml-matrix": "^6.11.0"
     },
     "peerDependencies": {
         "flat": "^5.0.2",

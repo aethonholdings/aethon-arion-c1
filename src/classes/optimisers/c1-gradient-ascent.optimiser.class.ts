@@ -1,4 +1,4 @@
-import { C1ConfiguratorNames, C1MatrixInitTypes, C1OptimiserNames } from "../../constants/c1.model.constants";
+import { C1ConfiguratorNames, C1MatrixInitTypes, C1ModelClockTickSeconds, C1OptimiserNames } from "../../constants/c1.model.constants";
 import { c1DefaultConfiguratorParamData } from "../../constants/c1.defaults.constants";
 import { C1ConfiguratorParamData } from "../../interfaces/c1.interfaces";
 import {
@@ -475,6 +475,7 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
 
         // Test for convergence if all data points are completed
         if (state.status === States.COMPLETED) {
+            this._estimateGradients(state, results, parameterDomains);
             const convergenceTest = this._testConvergence(parameters, state);
             state.converged = convergenceTest.converged;
             state.optimiserData.moduloDel = convergenceTest.modulo;
@@ -652,11 +653,9 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             const currentValue = xConfigFlat[parameterId];
 
             if (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) {
-                // a zero-width domain is a fixed parameter: no derivative can be taken (the step would be 0 and the
-                // slope 0/0 = NaN)
+                // a zero-width domain is a fixed parameter: no derivative can be taken
                 if (domain.min === domain.max) continue;
-                const point = this._createNumericalGradientPoint(parameterId, currentValue, domain, xConfigFlat);
-                gradientPoints.push(point);
+                gradientPoints.push(...this._createNumericalGradientPoints(parameterId, currentValue, domain, xConfigFlat));
             } else if (domain.type === DomainTypes.BOOLEAN) {
                 const point = this._createBooleanGradientPoint(parameterId, currentValue, domain, xConfigFlat);
                 gradientPoints.push(point);
@@ -669,50 +668,45 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
         return gradientPoints;
     }
 
-    private _createNumericalGradientPoint(
+    /**
+     * Perturbed points of a numerical parameter.
+     *
+     * - Continuous: x + delta and x - delta (central difference; the forward difference used before is biased by
+     *   half the step). At a bound the side outside the domain is dropped and x itself is used instead, giving a
+     *   one-sided difference.
+     * - Discrete: the neighbours x - 1 and x + 1 inside the domain (neighbour search; see _calculateNextX).
+     */
+    private _createNumericalGradientPoints(
         parameterId: string,
         currentValue: number,
         domain: Domain,
         xConfigFlat: any
-    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput> {
-        // Type guard: ensure domain has numerical properties
+    ): DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[] {
         if (!domain.optimise || (domain.type !== DomainTypes.CONTINUOUS && domain.type !== DomainTypes.DISCRETE)) {
             throw new Error(`Domain ${parameterId} is not an optimisable numerical domain`);
         }
-
-        // Calculate step size (derivative step)
-        let stepSize: number;
-        if (currentValue < domain.max) {
-            // Step forward if not at max
-            stepSize = Math.min(domain.derivativeStepSize, domain.max - currentValue);
-        } else {
-            // Step backward if at max boundary
-            stepSize = -Math.min(domain.derivativeStepSize, currentValue - domain.min);
-        }
-
-        let perturbedValue = currentValue + stepSize;
-        if (domain.type === DomainTypes.DISCRETE) {
-            // discrete parameters are perturbed to a neighbouring integer inside the domain
-            perturbedValue = Math.round(perturbedValue);
-            if (perturbedValue === currentValue) perturbedValue = currentValue + (currentValue < domain.max ? 1 : -1);
-            perturbedValue = Math.max(domain.min, Math.min(domain.max, perturbedValue));
-            stepSize = perturbedValue - currentValue;
-        }
-        const perturbedConfigFlat = { ...xConfigFlat, [parameterId]: perturbedValue };
-        const perturbedConfig = flatten.unflatten(perturbedConfigFlat);
-
-        const output: GradientAscentOutput = {
-            id: parameterId,
-            domain: domain,
-            configuratorParameterValue: perturbedValue,
-            xPlusDelta: perturbedValue,
-            xDelta: stepSize,
-            slope: undefined,
-            performance: undefined,
-            performanceDelta: undefined
-        };
-
-        return this._createDataPoint(parameterId, perturbedConfig, output);
+        const values: number[] =
+            domain.type === DomainTypes.DISCRETE
+                ? [Math.round(currentValue) + 1, Math.round(currentValue) - 1]
+                : [
+                      Math.min(domain.max, currentValue + domain.derivativeStepSize),
+                      Math.max(domain.min, currentValue - domain.derivativeStepSize)
+                  ];
+        return values
+            .filter((value) => value >= domain.min && value <= domain.max && value !== currentValue)
+            .map((value) => {
+                const output: GradientAscentOutput = {
+                    id: parameterId,
+                    domain: domain,
+                    configuratorParameterValue: value,
+                    xPlusDelta: value,
+                    xDelta: value - currentValue,
+                    slope: undefined,
+                    performance: undefined,
+                    performanceDelta: undefined
+                };
+                return this._createDataPoint(parameterId, flatten.unflatten({ ...xConfigFlat, [parameterId]: value }), output);
+            });
     }
 
     private _createBooleanGradientPoint(
@@ -793,37 +787,70 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     ): void {
         const xDataPoint = this._getXDataPoint(state);
         const xResult = results.find((result) => result.configuratorParams.hash === xDataPoint.data.inputs.hash);
-
         if (!xResult) {
             throw new Error(`Result for x point not found in optimiser state ${state.id}`);
         }
-
-        // Update x point performance
         xDataPoint.data.outputs.performance = xResult.avgPerformance;
         xDataPoint.status = xResult.state;
         state.performance = xResult.avgPerformance;
-
-        // Update all gradient points
         for (const dataPoint of state.optimiserData.dataPoints) {
             if (dataPoint.id === "x") continue;
-
             const result = results.find((r) => r.configuratorParams.hash === dataPoint.data.inputs.hash);
             if (!result) {
                 throw new Error(`Result not found for data point ${dataPoint.id} in optimiser state ${state.id}`);
             }
-
             dataPoint.status = result.state;
             dataPoint.data.outputs.performance = result.avgPerformance;
             dataPoint.data.outputs.performanceDelta = result.avgPerformance - xResult.avgPerformance;
+        }
+    }
 
-            const domain = parameterDomains[dataPoint.id];
-            if (!domain) continue;
-
-            // Calculate slope for numerical domains
-            if ((domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) &&
-                dataPoint.data.outputs.xDelta !== undefined &&
-                dataPoint.data.outputs.performanceDelta !== undefined) {
-                dataPoint.data.outputs.slope = dataPoint.data.outputs.performanceDelta / dataPoint.data.outputs.xDelta;
+    /**
+     * Estimates, once every point is complete, the gradient of each continuous parameter and the improvement offered
+     * by each alternative value of the other parameters, each with its standard error.
+     *
+     * @remarks
+     * Differences are paired by org config replicate when the results carry per-replicate means: with common random
+     * numbers replicate k of every point shares its random draws, so the paired difference cancels most of the
+     * scenario noise. Without replicate data the standard errors of the two means are combined as if independent.
+     */
+    private _estimateGradients(
+        state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>,
+        results: ConvergenceTestDTO[],
+        parameterDomains: { [key: string]: Domain }
+    ): void {
+        const byHash = new Map(results.map((result) => [result.configuratorParams.hash, result]));
+        const xDataPoint = this._getXDataPoint(state);
+        const xResult = byHash.get(xDataPoint.data.inputs.hash) as ConvergenceTestDTO;
+        const xValues = flatten(xDataPoint.data.inputs.data);
+        for (const [parameterId, domain] of Object.entries(parameterDomains)) {
+            if (!domain.optimise) continue;
+            const points = state.optimiserData.dataPoints.filter((dp) => dp.id === parameterId);
+            if (points.length === 0) continue;
+            if (domain.type === DomainTypes.CONTINUOUS) {
+                // the two ends of the difference: the perturbed points, or x where a side was dropped at a bound
+                const ends = points.map((dp) => ({
+                    value: dp.data.outputs.xPlusDelta as number,
+                    result: byHash.get(dp.data.inputs.hash) as ConvergenceTestDTO
+                }));
+                if (ends.length === 1) ends.push({ value: xValues[parameterId], result: xResult });
+                ends.sort((a, b) => a.value - b.value);
+                const difference = pairedDifference(ends[0].result, ends[1].result);
+                const width = ends[1].value - ends[0].value;
+                for (const dp of points) {
+                    dp.data.outputs.slope = difference.mean / width;
+                    dp.data.outputs.slopeStandardError = difference.standardError / width;
+                }
+            } else {
+                for (const dp of points) {
+                    const difference = pairedDifference(xResult, byHash.get(dp.data.inputs.hash) as ConvergenceTestDTO);
+                    dp.data.outputs.performanceDelta = difference.mean;
+                    dp.data.outputs.performanceDeltaStandardError = difference.standardError;
+                    if (domain.type === DomainTypes.DISCRETE) {
+                        dp.data.outputs.slope = difference.mean / (dp.data.outputs.xDelta as number);
+                        dp.data.outputs.slopeStandardError = difference.standardError;
+                    }
+                }
             }
         }
     }
@@ -865,139 +892,83 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     ): C1ConfiguratorParamData {
         const previousXConfigFlat = flatten(previousX.data.inputs.data);
         const newXConfigFlat = { ...previousXConfigFlat };
-
         for (const [parameterId, domain] of Object.entries(parameterDomains)) {
             if (!domain.optimise) continue;
-
-            const gradientDataPoints = state.optimiserData.dataPoints.filter(dp => dp.id === parameterId);
-            if (gradientDataPoints.length === 0) continue;
-
-            const currentValue = previousXConfigFlat[parameterId];
-
-            if (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) {
-                newXConfigFlat[parameterId] = this._calculateNextNumericalValue(
-                    parameters,
-                    currentValue,
-                    gradientDataPoints,
-                    domain
-                );
-            } else if (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) {
-                newXConfigFlat[parameterId] = this._calculateNextCategoricalValue(
-                    previousX,
-                    gradientDataPoints
-                );
+            const points = state.optimiserData.dataPoints.filter((dp) => dp.id === parameterId);
+            if (points.length === 0) continue;
+            if (domain.type === DomainTypes.CONTINUOUS) {
+                // gradient step on the central-difference slope
+                const slope = points[0].data.outputs.slope ?? 0;
+                newXConfigFlat[parameterId] = this._boundStep(parameters, previousXConfigFlat[parameterId], slope, domain);
+            } else {
+                // neighbour search (discrete) / best alternative (categorical, boolean): move only to an alternative
+                // that is better than x by more than two standard errors, so that noise alone does not move x
+                const best = this._bestAlternative(points);
+                if (best && best.delta - 2 * best.standardError > 0) {
+                    newXConfigFlat[parameterId] = best.point.data.outputs.configuratorParameterValue;
+                }
             }
         }
-
         return flatten.unflatten(newXConfigFlat);
     }
 
-    private _calculateNextNumericalValue(
-        parameters: GradientAscentParameters,
-        currentValue: number,
-        gradientDataPoints: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[],
-        domain: Domain
-    ): number {
-        // FIXED: Sort in descending order to get maximum performance
-        const bestDataPoint = gradientDataPoints.sort((a, b) => {
-            const perfA = a.data.outputs.performance ?? -Infinity;
-            const perfB = b.data.outputs.performance ?? -Infinity;
-            return perfB - perfA; // Descending order
-        })[0];
-
-        const slope = bestDataPoint?.data?.outputs?.slope ?? 0;
-        return this._boundStep(parameters, currentValue, slope, domain);
+    /** The alternative with the largest estimated improvement over x. */
+    private _bestAlternative(
+        points: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[]
+    ): { point: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>; delta: number; standardError: number } | null {
+        let best: { point: any; delta: number; standardError: number } | null = null;
+        for (const point of points) {
+            const delta = point.data.outputs.performanceDelta;
+            if (delta === undefined || delta === null || !Number.isFinite(delta)) continue;
+            if (!best || delta > best.delta) {
+                best = { point, delta, standardError: point.data.outputs.performanceDeltaStandardError ?? 0 };
+            }
+        }
+        return best;
     }
 
-    private _calculateNextCategoricalValue(
-        previousX: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>,
-        gradientDataPoints: DataPoint<ConfiguratorParamsDTO<C1ConfiguratorParamData>, GradientAscentOutput>[]
-    ): any {
-        // FIXED: Sort in descending order to get maximum performance
-        const bestDataPoint = gradientDataPoints.sort((a, b) => {
-            const perfA = a.data.outputs.performance ?? -Infinity;
-            const perfB = b.data.outputs.performance ?? -Infinity;
-            return perfB - perfA; // Descending order
-        })[0];
-
-        const previousPerformance = previousX.data.outputs.performance ?? -Infinity;
-        const bestPerformance = bestDataPoint?.data.outputs.performance ?? -Infinity;
-
-        // If no best data point found, keep current value from previousX
-        if (!bestDataPoint) {
-            return previousX.data.outputs.configuratorParameterValue;
-        }
-
-        // Only switch if the new category performs better
-        if (bestPerformance > previousPerformance && bestDataPoint.data.outputs.configuratorParameterValue !== undefined) {
-            return bestDataPoint.data.outputs.configuratorParameterValue;
-        }
-
-        // Otherwise keep current value
-        const previousXConfigFlat = flatten(previousX.data.inputs.data);
-        return previousXConfigFlat[bestDataPoint.id];
-    }
-
-    // ============================================================================
-    // PRIVATE METHODS - Convergence Testing
-    // ============================================================================
-
+    /**
+     * Convergence: the optimiser is converged only when the gradient is confidently small.
+     *
+     * Each parameter contributes an upper confidence bound on the improvement it could still offer:
+     * - continuous: |slope| + 2 SE, or 0 when pinned at a bound with the gradient pointing outside the domain
+     * - discrete, categorical, boolean: max(0, best improvement + 2 SE)
+     * and the state is converged when the norm of these bounds is below the tolerance. (Comparing the noisy gradient
+     * itself with the tolerance stops whenever noise happens to make it small.)
+     */
     private _testConvergence(
         parameters: GradientAscentParameters,
         state: OptimiserStateDTO<GradientAscentOptimiserData<C1ConfiguratorParamData>>
     ): { converged: boolean; modulo: number } {
         const parameterDomains = this._getParameterDomains(parameters);
+        const xValues = flatten(this._getXDataPoint(state).data.inputs.data);
         let moduloSquared: number = 0;
-
-        for (const dataPoint of state.optimiserData.dataPoints) {
-            if (dataPoint.id === "x") continue;
-
-            const domain = parameterDomains[dataPoint.id];
-            if (!domain?.optimise) continue;
-
-            if ((domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE) && domain.optimise) {
-                const slope = dataPoint.data.outputs.slope;
-                const xPlusDelta = dataPoint.data.outputs.xPlusDelta;
-                const xDelta = dataPoint.data.outputs.xDelta;
-
-                if (slope === undefined || xPlusDelta === undefined || xDelta === undefined) continue;
-
-                // Calculate original x value
-                const x = xPlusDelta - xDelta;
-
-                // Only contribute to gradient if not at max boundary with positive slope
-                // (if at max and slope is positive, we can't ascend further)
-                // a parameter pinned at a bound with the gradient pointing out of the feasible domain cannot
-                // move further, so it does not count against convergence (projected gradient)
-                // x is reconstructed as xPlusDelta - xDelta, so compare against the bounds with a tolerance
-                const boundTolerance = 1e-9 * Math.max(1, Math.abs(domain.max - domain.min));
-                const pinnedAtMax = x >= domain.max - boundTolerance && slope > 0;
-                const pinnedAtMin = x <= domain.min + boundTolerance && slope < 0;
-                if (!pinnedAtMax && !pinnedAtMin) {
-                    moduloSquared += slope ** 2;
-                }
-            } else if (domain.type === DomainTypes.BOOLEAN || domain.type === DomainTypes.CATEGORICAL) {
-                const performanceDelta = dataPoint.data.outputs.performanceDelta;
-
-                if (performanceDelta === undefined) continue;
-
-                // FIXED: Square the performance delta for consistency with numerical domains
-                if (performanceDelta > 0) {
-                    moduloSquared += performanceDelta ** 2;
-                }
+        for (const [parameterId, domain] of Object.entries(parameterDomains)) {
+            if (!domain.optimise) continue;
+            const points = state.optimiserData.dataPoints.filter((dp) => dp.id === parameterId);
+            if (points.length === 0) continue;
+            let bound: number;
+            if (domain.type === DomainTypes.CONTINUOUS) {
+                const slope = points[0].data.outputs.slope;
+                if (slope === undefined || !Number.isFinite(slope)) continue;
+                const standardError = points[0].data.outputs.slopeStandardError ?? 0;
+                const x: number = xValues[parameterId];
+                const tolerance = 1e-9 * Math.max(1, Math.abs(domain.max - domain.min));
+                const pinned = (x >= domain.max - tolerance && slope > 0) || (x <= domain.min + tolerance && slope < 0);
+                bound = pinned ? 0 : Math.abs(slope) + 2 * standardError;
+            } else {
+                const best = this._bestAlternative(points);
+                if (!best) continue;
+                bound = Math.max(0, best.delta + 2 * best.standardError);
             }
+            moduloSquared += bound ** 2;
         }
-
         const modulo = Math.sqrt(moduloSquared);
         return {
             converged: modulo < parameters.iterations.tolerance,
             modulo: modulo
         };
     }
-
-    // ============================================================================
-    // PRIVATE METHODS - Utility Functions
-    // ============================================================================
 
     private _getParameterDomains(parameters: GradientAscentParameters): { [key: string]: Domain } {
         return Object.fromEntries(
@@ -1091,6 +1062,17 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
     validateParameters(parameters: GradientAscentParameters): string[] {
         const errors: string[] = super.validateParameters(parameters);
         for (const { id, domain } of parameters?.parameterSpace ?? []) {
+            // bounded parameters: the influence stability limit (gain * clock tick <= 1) and the fractions in [0, 1]
+            const upper: { [key: string]: number } = {
+                "gains.influence": 1 / C1ModelClockTickSeconds,
+                repulsiveFraction: 1,
+                hybridNoise: 1
+            };
+            if (upper[id] !== undefined && (domain.type === DomainTypes.CONTINUOUS || domain.type === DomainTypes.DISCRETE)) {
+                const high = domain.optimise ? domain.max : (domain as any).default;
+                const low = domain.optimise ? domain.min : (domain as any).default;
+                if (high > upper[id] || low < 0) errors.push(`${id}: must be within [0, ${upper[id]}]`);
+            }
             if (id !== "spans" && id !== "layers") continue;
             if (domain.type !== DomainTypes.DISCRETE) {
                 errors.push(`${id}: must be a discrete domain`);
@@ -1165,4 +1147,46 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
             }
         }
     }
+}
+
+/** Per-replicate data of a convergence test, as attached by the server (see ConvergenceTestDTO.replicates). */
+type Replicate = { replicate: number | null; avgPerformance: number | null; stdDevPerformance?: number | null; runCount?: number };
+
+/** Standard error of a convergence test's mean performance. */
+function standardErrorOf(result: ConvergenceTestDTO): number {
+    const replicates: Replicate[] = ((result as any).replicates ?? []).filter((r: Replicate) => r.avgPerformance !== null);
+    if (replicates.length >= 2 || (result.orgConfigCount ?? 0) >= 2) {
+        const k = Math.max(replicates.length, result.orgConfigCount ?? 0);
+        return (result.stdDevPerformance ?? 0) / Math.sqrt(k);
+    }
+    // a single org config: the noise is the run-to-run noise of its mean
+    const single = replicates[0];
+    return single && single.runCount && single.runCount > 0 ? (single.stdDevPerformance ?? 0) / Math.sqrt(single.runCount) : 0;
+}
+
+/**
+ * Difference of mean performance b - a with its standard error. Paired by org config replicate when both results
+ * carry at least two common replicates (common random numbers make the pairs strongly correlated); otherwise the
+ * difference of the two means with independent standard errors.
+ */
+export function pairedDifference(a: ConvergenceTestDTO, b: ConvergenceTestDTO): { mean: number; standardError: number; pairs: number } {
+    const index = (result: ConvergenceTestDTO) =>
+        new Map<number, number>(
+            ((result as any).replicates ?? [])
+                .filter((r: Replicate) => r.replicate !== null && r.avgPerformance !== null && Number.isFinite(r.avgPerformance))
+                .map((r: Replicate) => [r.replicate as number, r.avgPerformance as number])
+        );
+    const ia = index(a), ib = index(b);
+    const diffs: number[] = [];
+    for (const [replicate, value] of ia) if (ib.has(replicate)) diffs.push((ib.get(replicate) as number) - value);
+    if (diffs.length >= 2) {
+        const mean = diffs.reduce((acc, d) => acc + d, 0) / diffs.length;
+        const variance = diffs.reduce((acc, d) => acc + (d - mean) ** 2, 0) / (diffs.length - 1);
+        return { mean, standardError: Math.sqrt(variance / diffs.length), pairs: diffs.length };
+    }
+    return {
+        mean: (b.avgPerformance ?? 0) - (a.avgPerformance ?? 0),
+        standardError: Math.sqrt(standardErrorOf(a) ** 2 + standardErrorOf(b) ** 2),
+        pairs: 0
+    };
 }

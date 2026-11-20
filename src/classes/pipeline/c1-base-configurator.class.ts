@@ -23,6 +23,7 @@ import {
 } from "../../interfaces/c1.interfaces";
 import { C1Model } from "../pipeline/c1-model.class";
 import { C1BaseConfiguratorDefaultData, c1DefaultConfiguratorParamData } from "../../constants/c1.defaults.constants";
+import { EigenvalueDecomposition, Matrix } from "ml-matrix";
 
 /**
  * Base configurator for the C1 organizational coordination model.
@@ -376,17 +377,41 @@ export class C1BaseConfigurator extends Configurator<
         const uniform = (gain: number, amplitude: number = 1) => amplitude * gain * (2 * random() - 1);
         const init = params.data.matrixInit;
         const gains = params.data.gains;
+        const repulsiveFraction: number = params.data.repulsiveFraction ?? 0;
+        if (!(hybridNoise >= 0 && hybridNoise <= 1)) throw new Error(`hybridNoise must be in [0, 1] (got ${hybridNoise})`);
+        if (!(repulsiveFraction >= 0 && repulsiveFraction <= 1)) {
+            throw new Error(`repulsiveFraction must be in [0, 1] (got ${repulsiveFraction})`);
+        }
+        // the influence update is stable for gain * clock tick <= 1 (Gershgorin bound on the degree-normalised
+        // coupling operator, see c1InfluenceDiagnostics); larger gains overshoot and can lock in the wrong state
+        if (gains.influence * C1ModelClockTickSeconds > 1) {
+            throw new Error(
+                `gains.influence ${gains.influence} exceeds the stability limit 1 / clockTickSeconds = ${1 / C1ModelClockTickSeconds}`
+            );
+        }
+        const degree: number[] = graph.map((row) => row.reduce((acc, v) => acc + v, 0));
+        // one repulsion draw per ordered pair of connected agents (an edge is attractive or repulsive as a whole)
+        const repulsive: boolean[][] = graph.map((row) => row.map((edge) => edge === 1 && repulsiveFraction > 0 && random() < repulsiveFraction));
 
         for (let alpha = 0; alpha < agentCount; alpha++) {
             for (let sigma = 0; sigma < this.stateCount; sigma++) {
                 for (let tau = 0; tau < this.stateCount; tau++) {
-                    // influence: purposeful kernel -g couples an agent's priorities to its graph neighbours'
+                    // influence: attraction towards graph neighbours, normalised by degree so that an agent's
+                    // couplings sum to -g whatever its number of neighbours. "random" draws the strength of each
+                    // coupling (not its sign: random signs make agreement between agents unstable), "hybrid" adds
+                    // bounded noise to the purposeful strength; repulsiveFraction turns that share of the edges
+                    // into repulsion
                     for (let beta = 0; beta < agentCount; beta++) {
+                        if (!graph[alpha][beta]) {
+                            agentSetTensors.influenceTensor[alpha][beta][sigma][tau] = 0;
+                            continue;
+                        }
+                        const share: number = gains.influence / degree[alpha];
                         let value = 0;
-                        if (init.influence === "random") value = uniform(gains.influence);
-                        if (init.influence === "purposeful") value = -gains.influence;
-                        if (init.influence === "hybrid") value = -gains.influence + uniform(gains.influence, hybridNoise);
-                        agentSetTensors.influenceTensor[alpha][beta][sigma][tau] = value * graph[alpha][beta];
+                        if (init.influence === "random") value = -share * random();
+                        if (init.influence === "purposeful") value = -share;
+                        if (init.influence === "hybrid") value = -share * (1 + hybridNoise * (2 * random() - 1));
+                        agentSetTensors.influenceTensor[alpha][beta][sigma][tau] = repulsive[alpha][beta] ? -value : value;
                     }
                     // judgment: purposeful kernel -g towards Action, +g towards Self, per plant variable
                     for (let chi = 0; chi < this.plantDegreesOfFreedom; chi++) {
@@ -443,6 +468,12 @@ export class C1BaseConfigurator extends Configurator<
             unitPayroll: params.data.reporting?.unitPayroll ?? C1BaseConfiguratorDefaultData.reporting.unitPayroll
         } as C1ReportingConfig;
         configDTO.agentCount = agentCount;
+        configDTO.diagnostics = c1InfluenceDiagnostics(
+            agentSetTensors.influenceTensor,
+            params.data.actionStateProbability,
+            C1ModelClockTickSeconds,
+            gains.influence
+        );
         configDTO.agentSet = agentSetTensors;
         configDTO.priorityIntensity = Utils.modulo(agentSetTensors.priorityTensor);
         configDTO.influenceIntensity = Utils.modulo(agentSetTensors.influenceTensor);
@@ -526,3 +557,41 @@ export class C1BaseConfigurator extends Configurator<
     }
 }
 
+/**
+ * Diagnostics of the influence coupling of a C1 org config, from the linearisation of the priority update around
+ * agreement between agents. For two states, a disagreement dP evolves as dP <- dP + c * dt * (D - M) dP with
+ * M[a][b] = I[a][b][s][Action] + I[a][b][s][Self], D = diag(row sums of M) and c = p(1 - p).
+ *
+ * - stable: no disagreement mode grows (every eigenvalue of D - M other than the agreement mode has real part <= 0)
+ * - consensusTimeHours: e-folding time of the slowest-decaying disagreement mode (null when unstable or N = 1)
+ * - growthTimeHours: e-folding time of the fastest-growing mode (null when stable)
+ * - stepFactor: gain * dt; the update is free of overshoot for stepFactor <= 1
+ */
+export function c1InfluenceDiagnostics(
+    influenceTensor: number[][][][],
+    actionStateProbability: number,
+    clockTickSeconds: number,
+    gain: number
+): { stable: boolean; consensusTimeHours: number | null; growthTimeHours: number | null; stepFactor: number } {
+    const n = influenceTensor.length;
+    const c = actionStateProbability * (1 - actionStateProbability) || 0.25;
+    let worst = -Infinity; // largest real part over the non-agreement modes, over both source states
+    for (let sigma = 0; sigma < 2 && n > 1; sigma++) {
+        const m = influenceTensor.map((row) => row.map((entry) => entry[sigma][0] + entry[sigma][1]));
+        const a = m.map((row, i) => row.map((v, j) => (i === j ? row.reduce((acc, x) => acc + x, 0) : 0) - v));
+        const real: number[] = new EigenvalueDecomposition(new Matrix(a)).realEigenvalues;
+        let agreement = 0;
+        real.forEach((v, i) => {
+            if (Math.abs(v) < Math.abs(real[agreement])) agreement = i;
+        });
+        for (let i = 0; i < real.length; i++) if (i !== agreement) worst = Math.max(worst, real[i]);
+    }
+    const hours = (rate: number) => (rate === 0 ? null : 1 / (c * clockTickSeconds * Math.abs(rate)) * (clockTickSeconds / 3600));
+    const stable = !(worst > 1e-12);
+    return {
+        stable,
+        consensusTimeHours: n > 1 && stable ? hours(worst) : null,
+        growthTimeHours: n > 1 && !stable ? hours(worst) : null,
+        stepFactor: gain * clockTickSeconds
+    };
+}

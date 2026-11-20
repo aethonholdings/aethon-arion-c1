@@ -140,8 +140,9 @@ export { C1BaseConfiguratorDefaultData } from "./c1.defaults.constants";
 
 // version of the C1 model implementation; bump whenever a change alters simulation outputs. Version 2: priority
 // updates without 4-decimal rounding and with an epsilon floor (core 0.3), corrected control-step revenue target,
-// hybrid initialisation with noise, incentive gaps relative to the target (core 0.3)
-export const C1ModelVersion: string = "2";
+// hybrid initialisation with noise, incentive gaps relative to the target (core 0.3). Version 3: attractive,
+// degree-normalised influence (random strengths, optional repulsive fraction), influence stability limit
+export const C1ModelVersion: string = "3";
 
 // The C1 model
 export const C1: C1Model = new C1Model();

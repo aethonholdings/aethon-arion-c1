@@ -194,14 +194,14 @@ describe('C1GradientAscentOptimiser', () => {
 
             const state = optimizer.initialise(parameters, simSetDTO);
 
-            // Should have x point + 1 gradient point
-            expect(state.optimiserData.dataPoints.length).toBe(2);
-
-            const gradientPoint = state.optimiserData.dataPoints.find(dp => dp.id === 'spans');
-            expect(gradientPoint).toBeDefined();
-            expect(gradientPoint!.data.outputs.xDelta).toBeDefined();
-            expect(gradientPoint!.data.outputs.xPlusDelta).toBeDefined();
-            expect(Number.isInteger(gradientPoint!.data.outputs.xPlusDelta)).toBe(true);
+            // x plus its in-domain integer neighbours (neighbour search): two points, or one at a bound
+            const x = state.optimiserData.dataPoints.find(dp => dp.id === 'x')!.data.inputs.data.spans;
+            const neighbours = state.optimiserData.dataPoints.filter(dp => dp.id === 'spans');
+            expect(neighbours.length).toBe(x === 1 || x === 5 ? 1 : 2);
+            for (const point of neighbours) {
+                expect(Math.abs(point.data.outputs.xDelta as number)).toBe(1);
+                expect(Number.isInteger(point.data.outputs.xPlusDelta)).toBe(true);
+            }
         });
 
         it('should generate gradient points for boolean domain', () => {
@@ -468,11 +468,10 @@ describe('C1GradientAscentOptimiser', () => {
             const xPoint = state.optimiserData.dataPoints.find(dp => dp.id === 'x');
             const gradientPoint = state.optimiserData.dataPoints.find(dp => dp.id === 'spans');
 
-            // Mock results showing positive slope
-            const results: ConvergenceTestDTO[] = [
-                createMockResult(1, States.COMPLETED, 100, xPoint!.data.inputs),
-                createMockResult(2, States.COMPLETED, 150, gradientPoint!.data.inputs)
-            ];
+            // spans 3 performs best among the neighbours of 2 (1 is worse)
+            const results: ConvergenceTestDTO[] = state.optimiserData.dataPoints.map((dp, i) =>
+                createMockResult(i + 1, States.COMPLETED, dp.id === 'x' ? 100 : dp.data.inputs.data.spans === 3 ? 150 : 50, dp.data.inputs)
+            );
 
             const updatedState = optimizer.update(parameters, state, results);
             const nextState = optimizer.step(parameters, updatedState, results);

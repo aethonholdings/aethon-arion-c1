@@ -20,7 +20,7 @@ describe("C1BaseConfigurator", () => {
                 params({
                     spans: 2,
                     layers: 2,
-                    gains: { influence: g, judgment: g, incentive: g },
+                    gains: { influence: 1e-3, judgment: g, incentive: g },
                     matrixInit: { influence: "hybrid", judgment: "hybrid", incentive: "hybrid" },
                     hybridNoise: noise
                 })
@@ -67,7 +67,7 @@ describe("C1BaseConfigurator", () => {
             params({
                 spans: 2,
                 layers: 2,
-                gains: { influence: 0.1, judgment: 0.5, incentive: 0 },
+                gains: { influence: 1e-3, judgment: 0.5, incentive: 0 },
                 matrixInit: { influence: "hybrid", judgment: "null", incentive: "null" }
             })
         );
