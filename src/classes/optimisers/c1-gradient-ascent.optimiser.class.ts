@@ -1061,6 +1061,20 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
      */
     validateParameters(parameters: GradientAscentParameters): string[] {
         const errors: string[] = super.validateParameters(parameters);
+        // influence is set either by a consensus time target (default) or by gains.influence: optimising
+        // gains.influence has no effect unless the target is switched off (null)
+        const space: { [key: string]: any } = Object.fromEntries((parameters?.parameterSpace ?? []).map((p) => [p.id, p.domain]));
+        const target = space["influenceConsensusHours"];
+        if (target?.optimise && !(target.min > 0)) errors.push("influenceConsensusHours: min must be positive");
+        if (space["gains.influence"]?.optimise) {
+            const fromInit = parameters.init?.type === "defined" ? (parameters.init as any).config?.influenceConsensusHours : undefined;
+            const off = target ? !target.optimise && target.default === null : fromInit === null;
+            if (!off) {
+                errors.push(
+                    "gains.influence is ignored while influenceConsensusHours is set: add influenceConsensusHours with default null to optimise it"
+                );
+            }
+        }
         for (const { id, domain } of parameters?.parameterSpace ?? []) {
             // bounded parameters: the influence stability limit (gain * clock tick <= 1) and the fractions in [0, 1]
             const upper: { [key: string]: number } = {

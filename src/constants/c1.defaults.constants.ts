@@ -26,7 +26,9 @@ export const C1BaseConfiguratorDefaultData: Readonly<C1ConfiguratorParamData> = 
     board: {
         controlStep: false
     },
-    hybridNoise: 0.5
+    hybridNoise: 0.5,
+    // 3 working days: reachable within the influence stability limit for hierarchies up to about 31 agents
+    influenceConsensusHours: 24
 };
 
 /** Returns a deep, mutable copy of the default C1BaseConfigurator parameters. */

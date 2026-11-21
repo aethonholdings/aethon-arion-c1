@@ -100,7 +100,7 @@ describe("C1 influence v3", () => {
                 modelName: "C1",
                 configuratorName: C1ConfiguratorNames.BASE,
                 multipleOrgConfigs: true,
-                data: { ...c1DefaultConfiguratorParamData(), spans: 3, layers: 3, graph: "top-down", gains: { influence: 1e-5, judgment: 1e-5, incentive: 1e-5 }, matrixInit: { influence, judgment: "null", incentive: "null" }, ...extra }
+                data: { ...c1DefaultConfiguratorParamData(), spans: 3, layers: 3, graph: "top-down", gains: { influence: 1e-5, judgment: 1e-5, incentive: 1e-5 }, matrixInit: { influence, judgment: "null", incentive: "null" }, influenceConsensusHours: null, ...extra }
             },
             seed
         );
@@ -137,5 +137,61 @@ describe("C1 influence v3", () => {
         expect(() => make("purposeful", { gains: { influence: 0.01, judgment: 1e-5, incentive: 1e-5 } })).toThrow(/stability limit/);
         expect(() => make("purposeful", { repulsiveFraction: 1.5 })).toThrow();
         expect(() => make("hybrid", { hybridNoise: 2 })).toThrow();
+    });
+});
+
+describe("C1 influence consensus time target", () => {
+    const configurator = C1.getConfigurator(C1ConfiguratorNames.BASE);
+    const make = (spans: number, layers: number, graph: string, influence: string, hours: number | null, seed = 5) =>
+        configurator.generate(
+            {
+                modelName: "C1",
+                configuratorName: C1ConfiguratorNames.BASE,
+                multipleOrgConfigs: true,
+                data: { ...c1DefaultConfiguratorParamData(), spans, layers, graph, matrixInit: { influence, judgment: "null", incentive: "null" }, influenceConsensusHours: hours }
+            },
+            seed
+        );
+
+    for (const [spans, layers, graph] of [[3, 2, "teams"], [3, 3, "top-down"], [4, 3, "teams"], [2, 5, "top-down"]] as const) {
+        for (const influence of ["purposeful", "random", "hybrid"]) {
+            it(`meets a 24 h target for spans=${spans}, layers=${layers}, ${graph}, ${influence}`, () => {
+                const d = make(spans, layers, graph, influence, 24).diagnostics!;
+                expect(d.influenceGain).toBeLessThanOrEqual(1 / 300 + 1e-15);
+                if (d.consensusTargetMet) {
+                    expect(d.consensusTimeHours).toBeCloseTo(24, 6);
+                } else {
+                    // unreachable within the stability limit: gain capped at the limit, consensus slower than the target
+                    expect(d.influenceGain).toBeCloseTo(1 / 300, 12);
+                    expect(d.consensusTimeHours).toBeGreaterThan(24);
+                }
+                // purposeful influence reaches the default target for every hierarchy tested
+                if (influence === "purposeful") expect(d.consensusTargetMet).toBe(true);
+            });
+        }
+    }
+
+    it("caps the gain at the stability limit and reports an unreachable target", () => {
+        const d = make(2, 5, "top-down", "purposeful", 1).diagnostics!;
+        expect(d.consensusTargetMet).toBe(false);
+        expect(d.influenceGain).toBeCloseTo(1 / 300, 12);
+        expect(d.consensusTimeHours).toBeGreaterThan(1);
+        expect(d.stable).toBe(true);
+    });
+
+    it("uses gains.influence when the target is null", () => {
+        expect(make(3, 2, "teams", "purposeful", null).diagnostics!.influenceGain).toBe(c1DefaultConfiguratorParamData().gains.influence);
+    });
+
+    it("requires the target to be off when gains.influence is optimised", () => {
+        const space = (extra: any[]) => ({
+            init: { type: "random" },
+            parameterSpace: [{ id: "gains.influence", domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 1e-6, max: 1e-3, derivativeStepSize: 1e-5 } }, ...extra],
+            iterations: { learningRate: 1, tolerance: 1 }
+        });
+        expect(optimiser.validateParameters(space([])).some((e: string) => e.startsWith("gains.influence is ignored"))).toBe(true);
+        expect(
+            optimiser.validateParameters(space([{ id: "influenceConsensusHours", domain: { type: DomainTypes.CONTINUOUS, optimise: false, default: null } }]))
+        ).toEqual([]);
     });
 });
