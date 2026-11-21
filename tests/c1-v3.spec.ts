@@ -82,13 +82,23 @@ describe("C1 optimiser v3", () => {
         expect(next.optimiserData.dataPoints.find((dp: any) => dp.id === "x").data.inputs.data.graph).toBe("teams");
     });
 
-    it("rejects parameter spaces beyond the influence stability limit", () => {
-        const errors = optimiser.validateParameters({
+    it("rejects parameter spaces beyond the influence stability limit, counting connections", () => {
+        const space = (max: number, spansMax: number, normalisation?: string) => ({
             init: { type: "random" },
-            parameterSpace: [{ id: "gains.influence", domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max: 0.01, derivativeStepSize: 0.001 } }],
+            parameterSpace: [
+                { id: "gains.influence", domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 0, max, derivativeStepSize: max / 10 } },
+                { id: "spans", domain: { type: DomainTypes.DISCRETE, optimise: true, min: 1, max: spansMax, derivativeStepSize: 1 } },
+                ...(normalisation ? [{ id: "influenceNormalisation", domain: { type: DomainTypes.CATEGORICAL, optimise: false, default: normalisation } }] : [])
+            ],
             iterations: { learningRate: 1, tolerance: 1 }
         });
-        expect(errors.some((e: string) => e.startsWith("gains.influence"))).toBe(true);
+        const bad = (p: any) => optimiser.validateParameters(p).some((e: string) => e.startsWith("gains.influence"));
+        // edge normalisation: 2 x spans connections; 1e-3 x 10 x 300 > 1, 1e-4 x 10 x 300 <= 1
+        expect(bad(space(1e-3, 5))).toBe(true);
+        expect(bad(space(1e-4, 5))).toBe(false);
+        // degree normalisation: one coupling budget per agent
+        expect(bad(space(1e-3, 5, "degree"))).toBe(false);
+        expect(bad(space(1e-2, 5, "degree"))).toBe(true);
     });
 });
 
@@ -100,7 +110,7 @@ describe("C1 influence v3", () => {
                 modelName: "C1",
                 configuratorName: C1ConfiguratorNames.BASE,
                 multipleOrgConfigs: true,
-                data: { ...c1DefaultConfiguratorParamData(), spans: 3, layers: 3, graph: "top-down", gains: { influence: 1e-5, judgment: 1e-5, incentive: 1e-5 }, matrixInit: { influence, judgment: "null", incentive: "null" }, influenceConsensusHours: null, ...extra }
+                data: { ...c1DefaultConfiguratorParamData(), spans: 3, layers: 3, graph: "top-down", gains: { influence: 1e-5, judgment: 1e-5, incentive: 1e-5 }, matrixInit: { influence, judgment: "null", incentive: "null" }, influenceNormalisation: "degree", ...extra }
             },
             seed
         );
@@ -134,64 +144,52 @@ describe("C1 influence v3", () => {
     });
 
     it("rejects influence gains beyond the stability limit and invalid fractions", () => {
-        expect(() => make("purposeful", { gains: { influence: 0.01, judgment: 1e-5, incentive: 1e-5 } })).toThrow(/stability limit/);
+        expect(() => make("purposeful", { gains: { influence: 0.01, judgment: 1e-5, incentive: 1e-5 } })).toThrow(/step factor/);
         expect(() => make("purposeful", { repulsiveFraction: 1.5 })).toThrow();
         expect(() => make("hybrid", { hybridNoise: 2 })).toThrow();
     });
 });
 
-describe("C1 influence consensus time target", () => {
+describe("C1 influence normalisation and signs", () => {
     const configurator = C1.getConfigurator(C1ConfiguratorNames.BASE);
-    const make = (spans: number, layers: number, graph: string, influence: string, hours: number | null, seed = 5) =>
+    const make = (extra: any, seed = 9) =>
         configurator.generate(
             {
                 modelName: "C1",
                 configuratorName: C1ConfiguratorNames.BASE,
                 multipleOrgConfigs: true,
-                data: { ...c1DefaultConfiguratorParamData(), spans, layers, graph, matrixInit: { influence, judgment: "null", incentive: "null" }, influenceConsensusHours: hours }
+                data: { ...c1DefaultConfiguratorParamData(), spans: 3, layers: 3, graph: "teams", matrixInit: { influence: "purposeful", judgment: "null", incentive: "null" }, ...extra }
             },
             seed
         );
 
-    for (const [spans, layers, graph] of [[3, 2, "teams"], [3, 3, "top-down"], [4, 3, "teams"], [2, 5, "top-down"]] as const) {
-        for (const influence of ["purposeful", "random", "hybrid"]) {
-            it(`meets a 24 h target for spans=${spans}, layers=${layers}, ${graph}, ${influence}`, () => {
-                const d = make(spans, layers, graph, influence, 24).diagnostics!;
-                expect(d.influenceGain).toBeLessThanOrEqual(1 / 300 + 1e-15);
-                if (d.consensusTargetMet) {
-                    expect(d.consensusTimeHours).toBeCloseTo(24, 6);
-                } else {
-                    // unreachable within the stability limit: gain capped at the limit, consensus slower than the target
-                    expect(d.influenceGain).toBeCloseTo(1 / 300, 12);
-                    expect(d.consensusTimeHours).toBeGreaterThan(24);
-                }
-                // purposeful influence reaches the default target for every hierarchy tested
-                if (influence === "purposeful") expect(d.consensusTargetMet).toBe(true);
-            });
-        }
-    }
-
-    it("caps the gain at the stability limit and reports an unreachable target", () => {
-        const d = make(2, 5, "top-down", "purposeful", 1).diagnostics!;
-        expect(d.consensusTargetMet).toBe(false);
-        expect(d.influenceGain).toBeCloseTo(1 / 300, 12);
-        expect(d.consensusTimeHours).toBeGreaterThan(1);
-        expect(d.stable).toBe(true);
+    it("defaults to the original per-connection coupling", () => {
+        expect(c1DefaultConfiguratorParamData().influenceNormalisation).toBe("edge");
+        const oc = make({});
+        const g = c1DefaultConfiguratorParamData().gains.influence;
+        const graph = (oc.plant as any).graph;
+        for (let a = 0; a < oc.agentCount; a++)
+            for (let b = 0; b < oc.agentCount; b++) expect(oc.agentSet.influenceTensor[a][b][0][0]).toBe(graph[a][b] ? -g : 0);
     });
 
-    it("uses gains.influence when the target is null", () => {
-        expect(make(3, 2, "teams", "purposeful", null).diagnostics!.influenceGain).toBe(c1DefaultConfiguratorParamData().gains.influence);
+    it("draws signed couplings uniformly with influenceSigns uniform", () => {
+        const oc = make({ matrixInit: { influence: "random", judgment: "null", incentive: "null" }, influenceSigns: "uniform" });
+        const values = oc.agentSet.influenceTensor.flat(3).filter((v: number) => v !== 0);
+        const g = c1DefaultConfiguratorParamData().gains.influence;
+        expect(values.some((v: number) => v > 0) && values.some((v: number) => v < 0)).toBe(true);
+        for (const v of values) expect(Math.abs(v)).toBeLessThanOrEqual(g);
     });
 
-    it("requires the target to be off when gains.influence is optimised", () => {
-        const space = (extra: any[]) => ({
-            init: { type: "random" },
-            parameterSpace: [{ id: "gains.influence", domain: { type: DomainTypes.CONTINUOUS, optimise: true, min: 1e-6, max: 1e-3, derivativeStepSize: 1e-5 } }, ...extra],
-            iterations: { learningRate: 1, tolerance: 1 }
-        });
-        expect(optimiser.validateParameters(space([])).some((e: string) => e.startsWith("gains.influence is ignored"))).toBe(true);
-        expect(
-            optimiser.validateParameters(space([{ id: "influenceConsensusHours", domain: { type: DomainTypes.CONTINUOUS, optimise: false, default: null } }]))
-        ).toEqual([]);
+    it("reports diagnostics as outputs for both normalisations", () => {
+        const edge = make({}).diagnostics!;
+        const degree = make({ influenceNormalisation: "degree" }).diagnostics!;
+        expect(edge.stable && degree.stable).toBe(true);
+        // per-connection coupling is stronger in total, so agreement is faster than with a per-agent budget
+        expect(edge.consensusTimeHours).toBeLessThan(degree.consensusTimeHours);
+    });
+
+    it("rejects invalid normalisation and sign options", () => {
+        expect(() => make({ influenceNormalisation: "x" })).toThrow();
+        expect(() => make({ influenceSigns: "x" })).toThrow();
     });
 });

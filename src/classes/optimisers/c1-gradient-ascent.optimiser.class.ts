@@ -1061,24 +1061,28 @@ export class C1GradientAscentOptimiser extends GradientAscentOptimiser<
      */
     validateParameters(parameters: GradientAscentParameters): string[] {
         const errors: string[] = super.validateParameters(parameters);
-        // influence is set either by a consensus time target (default) or by gains.influence: optimising
-        // gains.influence has no effect unless the target is switched off (null)
+        // influence stability: per-agent coupling = gains.influence x connections ("edge") or x 1 ("degree"); the
+        // update is free of overshoot for coupling x clockTickSeconds <= 1. C1 agents have at most 2 x spans
+        // connections (teams graph: parent, siblings, children), so the bound uses the largest spans in the space
         const space: { [key: string]: any } = Object.fromEntries((parameters?.parameterSpace ?? []).map((p) => [p.id, p.domain]));
-        const target = space["influenceConsensusHours"];
-        if (target?.optimise && !(target.min > 0)) errors.push("influenceConsensusHours: min must be positive");
-        if (space["gains.influence"]?.optimise) {
-            const fromInit = parameters.init?.type === "defined" ? (parameters.init as any).config?.influenceConsensusHours : undefined;
-            const off = target ? !target.optimise && target.default === null : fromInit === null;
-            if (!off) {
-                errors.push(
-                    "gains.influence is ignored while influenceConsensusHours is set: add influenceConsensusHours with default null to optimise it"
-                );
-            }
+        const largest = (id: string, fallback: any) => {
+            const domain = space[id];
+            if (!domain) return fallback;
+            if (domain.type === DomainTypes.CATEGORICAL) return domain.optimise ? domain.categories : [domain.default];
+            return domain.optimise ? domain.max : domain.default;
+        };
+        const normalisations: string[] = [].concat(largest("influenceNormalisation", c1DefaultConfiguratorParamData().influenceNormalisation));
+        const connections: number = normalisations.includes("degree") && !normalisations.includes("edge") ? 1 : Math.max(2, 2 * largest("spans", 1));
+        const influenceMax: number = largest("gains.influence", c1DefaultConfiguratorParamData().gains.influence);
+        if (influenceMax * connections * C1ModelClockTickSeconds > 1) {
+            errors.push(
+                `gains.influence: up to ${influenceMax} with up to ${connections} connections per agent exceeds the stability ` +
+                    `limit (gain x connections x ${C1ModelClockTickSeconds} s must not exceed 1)`
+            );
         }
         for (const { id, domain } of parameters?.parameterSpace ?? []) {
             // bounded parameters: the influence stability limit (gain * clock tick <= 1) and the fractions in [0, 1]
             const upper: { [key: string]: number } = {
-                "gains.influence": 1 / C1ModelClockTickSeconds,
                 repulsiveFraction: 1,
                 hybridNoise: 1
             };

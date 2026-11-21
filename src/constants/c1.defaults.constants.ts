@@ -6,10 +6,12 @@ import { C1ConfiguratorParamData } from "../interfaces/c1.interfaces";
 export const C1BaseConfiguratorDefaultData: Readonly<C1ConfiguratorParamData> = {
     spans: 1,
     layers: 1,
+    // calibrated so that the starting point responds to every gain within a 20 to 100 day horizon (largest smallest
+    // elasticity across 4 and 13 agent teams with random initialisation): performance mid-range, not saturated, and
+    // every gain on the steep part of its response curve rather than on a flat plateau (per second)
     gains: {
-        influence: 0.00001,
-        judgment: 0.00001,
-        // per second, applied to the relative incentive gap (fraction of target); comparable to the judgment gain
+        influence: 0.00003,
+        judgment: 0.00003,
         incentive: 0.00001
     },
     actionStateProbability: 0.85,
@@ -27,8 +29,8 @@ export const C1BaseConfiguratorDefaultData: Readonly<C1ConfiguratorParamData> = 
         controlStep: false
     },
     hybridNoise: 0.5,
-    // 3 working days: reachable within the influence stability limit for hierarchies up to about 31 agents
-    influenceConsensusHours: 24
+    influenceNormalisation: "edge",
+    influenceSigns: "attractive"
 };
 
 /** Returns a deep, mutable copy of the default C1BaseConfigurator parameters. */

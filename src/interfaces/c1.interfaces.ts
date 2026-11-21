@@ -22,9 +22,12 @@ export interface C1ConfiguratorParamData extends ConfiguratorParamData {
         judgment: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
         incentive: C1ConfiguratorInitType; // random kernel has random values | purposeful kernel has values that drive the agent to the collaboration state | hybrid blends random and purposeful
     };
-    // target e-folding time (simulated working hours) of the slowest disagreement between agents; when set, the
-    // influence gain is derived from it per org config and gains.influence is ignored; null uses gains.influence
-    influenceConsensusHours?: number | null;
+    // "edge" (default, original model): gains.influence per connection; "degree": gains.influence per agent, shared
+    // over its connections
+    influenceNormalisation?: "edge" | "degree";
+    // random influence: "attractive" (default) draws strengths g * U(0, 1); "uniform" draws g * U(-1, 1) per entry
+    // (the original mixed attraction and repulsion)
+    influenceSigns?: "attractive" | "uniform";
     repulsiveFraction?: number; // share of influence edges that repel instead of attract (default 0)
     hybridNoise?: number; // for "hybrid" initialisation: amplitude of the uniform noise added to the purposeful kernel, as a fraction of the gain (default 0.5)
     board: C1BoardConfig; // defines whether the Board will change the targets halfway through the simulation to zero to test controllability
