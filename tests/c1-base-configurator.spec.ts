@@ -15,7 +15,7 @@ describe("C1BaseConfigurator", () => {
     it("adds bounded noise to the purposeful kernels when init is hybrid", () => {
         const g = 0.5;
         const noise = 0.5;
-        const make = () =>
+        const make = (seed: number) =>
             configurator.generate(
                 params({
                     spans: 2,
@@ -23,10 +23,11 @@ describe("C1BaseConfigurator", () => {
                     gains: { influence: 1e-3, judgment: g, incentive: g },
                     matrixInit: { influence: "hybrid", judgment: "hybrid", incentive: "hybrid" },
                     hybridNoise: noise
-                })
+                }),
+                seed
             );
-        const a = make();
-        const b = make();
+        const a = make(1);
+        const b = make(2);
         const purposefulJudgment = [
             [[-g], [g]],
             [[-g], [g]]

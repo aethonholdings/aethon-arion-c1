@@ -119,12 +119,12 @@ describe("C1 board and KPI fixes", () => {
     const simConfig = (controlStep: boolean): SimConfigDTO => {
         const params = C1.getConfigurator(C1ConfiguratorNames.BASE).getDefaultParams();
         params.data = { ...params.data, spans: 2, layers: 2, board: { controlStep } };
-        const orgConfig = C1.getConfigurator(C1ConfiguratorNames.BASE).generate(params);
+        const orgConfig = C1.getConfigurator(C1ConfiguratorNames.BASE).generate(params, 1);
         return { id: 1, days: 1, randomStreamType: "random", runCount: 0, orgConfig } as unknown as SimConfigDTO;
     };
 
     it("targets revenue only over the ticks after the control step", async () => {
-        const result = await lastValueFrom(C1.run$(simConfig(true), new RandomStreamFactory(), new Logger(), "test"));
+        const result = await lastValueFrom(C1.run$(simConfig(true), RandomStreamFactory.seeded(11, 1), new Logger(), "test"));
         const ticks = (1 * 8 * 3600) / 300;
         const headcount = result.reporting[C1ReportingVariablesIndex.HEADCOUNT];
         expect(result.board[C1ReportingVariablesIndex.REVENUE]).toBe(headcount * (ticks - Math.ceil(ticks / 2)));
@@ -133,7 +133,7 @@ describe("C1 board and KPI fixes", () => {
 
     it("reports plant plan versus actual and a payroll build that adds up", async () => {
         const sc = simConfig(false);
-        const result = await lastValueFrom(C1.run$(sc, new RandomStreamFactory(), new Logger(), "test"));
+        const result = await lastValueFrom(C1.run$(sc, RandomStreamFactory.seeded(11, 1), new Logger(), "test"));
         const kpi: any = C1.getKPIFactory(KPIFactoryIndex.PLAN_VS_ACTUALS).generate({ ...result, simConfig: sc } as any);
         const lines = (name: string) => kpi.data.proFormas.find((p: any) => p.name === name).lineItems;
         const payroll = lines("Payroll build");
@@ -147,7 +147,7 @@ describe("C1 board and KPI fixes", () => {
     it("returns 0 rather than NaN for sales volume at a zero unit price", async () => {
         const sc = simConfig(false);
         (sc.orgConfig as any).reporting.unitPrice = 0;
-        const result = await lastValueFrom(C1.run$(sc, new RandomStreamFactory(), new Logger(), "test"));
+        const result = await lastValueFrom(C1.run$(sc, RandomStreamFactory.seeded(11, 1), new Logger(), "test"));
         const kpi: any = C1.getKPIFactory(KPIFactoryIndex.PLAN_VS_ACTUALS).generate({ ...result, simConfig: sc } as any);
         const all = kpi.data.proFormas.flatMap((p: any) => p.lineItems.map((l: any) => l.data));
         expect(all.some((d: any) => d && Number.isNaN(d.actual))).toBe(false);
@@ -156,7 +156,7 @@ describe("C1 board and KPI fixes", () => {
     it("does not change the input simConfig while running", async () => {
         const sc = simConfig(false);
         const before = JSON.stringify(sc);
-        await lastValueFrom(C1.run$(sc, new RandomStreamFactory(), new Logger(), "test"));
+        await lastValueFrom(C1.run$(sc, RandomStreamFactory.seeded(11, 1), new Logger(), "test"));
         expect(JSON.stringify(sc)).toBe(before);
     });
 });

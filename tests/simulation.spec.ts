@@ -23,7 +23,7 @@ describe("Simple C1 Simulation", () => {
     });
 
     it("initialises a simulation", () => {
-        const simulation = C1.createSimulation(simpleC1SimulationConfig as SimConfigDTO, logger, new RandomStreamFactory());
+        const simulation = C1.createSimulation(simpleC1SimulationConfig as SimConfigDTO, logger, RandomStreamFactory.seeded(1, 1));
         expect(simulation).not.toBeNull();
     });
 
