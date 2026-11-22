@@ -22,7 +22,7 @@
     },
     "peerDependencies": {
         "flat": "^5.0.2",
-        "rxjs": "~7.8.1"
+        "rxjs": "^7.5.0"
     },
     "devDependencies": {
         "@types/jasmine": "^5.1.4",
