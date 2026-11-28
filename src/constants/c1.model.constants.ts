@@ -19,7 +19,8 @@ export enum C1GraphTypes {
 }
 
 export enum C1OptimiserNames {
-    GRADIENT_ASCENT = "C1GradientAscentOptimiser"
+    GRADIENT_ASCENT = "C1GradientAscentOptimiser",
+    CONTROL_EXPERIMENT = "C1ControlExperimentOptimiser"
 }
 
 export enum C1ConfiguratorNames {

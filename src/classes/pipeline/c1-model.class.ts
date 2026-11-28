@@ -16,6 +16,7 @@ import { C1Organisation } from "../core/c1-organisation.class";
 import { C1PlanVsActualsReport } from "../analysis/c1-plan-vs-actuals.kpi-factory.class";
 import { C1BaseConfigurator } from "./c1-base-configurator.class";
 import { C1GradientAscentOptimiser } from "../optimisers/c1-gradient-ascent.optimiser.class";
+import { C1ControlExperimentOptimiser } from "../optimisers/c1-control-experiment.optimiser.class";
 
 export class C1Model extends Model {
     constructor() {
@@ -24,6 +25,7 @@ export class C1Model extends Model {
         this._configurators.push(new C1BaseConfigurator(this));
         this._kpiFactories.push(new C1PlanVsActualsReport(this));
         this._optimisers.push(new C1GradientAscentOptimiser(this));
+        this._optimisers.push(new C1ControlExperimentOptimiser(this));
     }
 
     getPerformance(resultDTO: ResultDTO): number | undefined {

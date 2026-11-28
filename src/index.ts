@@ -12,3 +12,13 @@ export {
 // interfaces
 export * from "./interfaces/c1.interfaces";
 export { C1BaseConfiguratorDefaultData, c1DefaultConfiguratorParamData } from "./constants/c1.defaults.constants";
+
+// optimisers
+export {
+    C1ControlExperimentOptimiser,
+    C1ControlExperimentParameters,
+    C1ControlExperimentData,
+    C1ControlExperimentResult,
+    C1ControlExperimentOutput,
+    C1_CONTROL_EXPERIMENT_MAX_ORG_CONFIGS
+} from "./classes/optimisers/c1-control-experiment.optimiser.class";
